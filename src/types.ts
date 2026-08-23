@@ -1,0 +1,159 @@
+export interface StoredUser {
+  id: string;
+  email: string;
+  role: 'USER' | 'ADMIN';
+  createdAt?: string;
+}
+
+export interface LevelDetails {
+  level: number;
+  title: string;
+  currentLevelXP: number;
+  nextLevelXP: number;
+  progressPercent: number;
+}
+
+export interface UserProfile {
+  id: string;
+  userId: string;
+  artisticName: string;
+  tagline: string;
+  bio: string;
+  favoriteStyle: string;
+  level: number;
+  totalXP: number;
+  streakDays: number;
+  lastPracticeDate?: string;
+  avatarUrl: string;
+  isPublic: boolean;
+  showStats: boolean;
+  showHistory: boolean;
+  totalSessions: number;
+  totalMinutesPracticed: number;
+  bestScore: number;
+  totalWordsRhymed: number;
+  levelDetails?: LevelDetails;
+}
+
+export interface Subscription {
+  userId: string;
+  plan: 'FREE' | 'PRO' | 'PREMIUM';
+  status: 'ACTIVE';
+  validUntil: string;
+  aiMonthlyQuota: number;
+  aiQuotaUsed: number;
+}
+
+export interface XPTransaction {
+  id: string;
+  userId: string;
+  amount: number;
+  reason: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface RhymePair {
+  word1: string;
+  word2: string;
+  type: 'perfeita' | 'toante' | 'aliteracao' | 'assonancia';
+  similarity: number;
+}
+
+export interface RhymeAnalysis {
+  wordsCount: number;
+  rhymesCount: number;
+  uniqueWordsRatio: number;
+  rhymeQuality: number;
+  flowScore: number;
+  creativityScore: number;
+  coherenceScore: number;
+  overallScore: number;
+  aiScore?: number;
+  heuristicScore: number;
+  metricScore?: number;
+  punchlineImpact?: number;
+  evaluationVerdict?: 'Lendário' | 'Excelente' | 'Sólido' | 'Em Evolução' | 'Precisa de Ajustes';
+  rhymePairs: RhymePair[];
+  strengths: string[];
+  improvements: string[];
+  suggestions: string[];
+  corrections?: string[];
+  punchlineFeedback?: string;
+  nextExercise: string;
+  aiCommentary?: string;
+  directFeedback?: string;
+  flowTips?: string;
+}
+
+export interface PracticeSession {
+  id: string;
+  userId: string;
+  beatId: string;
+  beatStyle: string;
+  bpm: number;
+  durationSeconds: number;
+  transcript: string;
+  analysis: RhymeAnalysis;
+  xpEarned: number;
+  createdAt: string;
+}
+
+export interface Lesson {
+  id: string;
+  title: string;
+  category: 'Fundamentos' | 'Métrica & Flow' | 'Punchlines' | 'Batalhas & Improviso' | 'Vocabulário';
+  difficulty: 'Iniciante' | 'Intermediário' | 'Avançado';
+  xpReward: number;
+  durationMinutes: number;
+  description: string;
+  theory: string;
+  audioExampleUrl?: string;
+  exampleLyrics: string[];
+  tips: string[];
+  exercisePrompt: string;
+  exerciseWords: string[];
+  isCompleted?: boolean;
+}
+
+export interface Challenge {
+  id: string;
+  title: string;
+  category: 'Daily' | 'Speed' | 'Punchline' | 'Vocabulary' | 'Storytelling';
+  difficulty: 'Fácil' | 'Médio' | 'Difícil';
+  xpReward: number;
+  timeLimitSeconds: number;
+  description: string;
+  theme: string;
+  requiredWords: string[];
+  recommendedBeat: string;
+  recommendedBpm: number;
+  completed?: boolean;
+}
+
+export interface Achievement {
+  key: string;
+  title: string;
+  description: string;
+  icon: string;
+  category: 'Prática' | 'XP' | 'Lições' | 'Consistência' | 'Desafios';
+  requirement: string;
+  isUnlocked?: boolean;
+  unlockedAt?: string | null;
+  progress?: number;
+}
+
+export interface Beat {
+  id: string;
+  title: string;
+  style: 'Boom Bap' | 'Trap' | 'Drill' | 'Lo-Fi' | 'Grime' | 'Speed Flow' | 'Custom';
+  bpm: number;
+  key: string;
+  producer: string;
+  energy: 'Chill' | 'Médio' | 'Agressivo' | 'Épico';
+  description: string;
+  audioUrl?: string;
+  source?: 'synth' | 'custom' | 'youtube' | 'stream';
+  thumbnailUrl?: string;
+  durationFormatted?: string;
+}

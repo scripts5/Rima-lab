@@ -2,10 +2,10 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
-import { analyzeRhymesDeterministically } from './src/lib/rhymes/rhymeAnalyzer.js';
-import { LESSONS_DATA } from './src/data/lessons.js';
-import { CHALLENGES_DATA } from './src/data/challenges.js';
-import { ACHIEVEMENTS_DATA } from './src/data/achievements.js';
+import { analyzeRhymesDeterministically } from './src/lib/rhymes/rhymeAnalyzer';
+import { LESSONS_DATA } from './src/data/lessons';
+import { CHALLENGES_DATA } from './src/data/challenges';
+import { ACHIEVEMENTS_DATA } from './src/data/achievements';
 
 // --- Database In-Memory Store with Seed Data ---
 
@@ -475,7 +475,7 @@ async function startServer() {
   });
 
   // Practice: Hybrid Rhyme Analysis (Deterministic + Gemini 3.7 Flash)
-  app.post('/api/practice/analyze', async (req, res) => {
+  app.post(['/api/practice/analyze', '/api/analyze-rhymes'], async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
       let userId = seedUserId;
@@ -486,16 +486,17 @@ async function startServer() {
       const profile = profiles.get(userId) || profiles.get(seedUserId)!;
       const sub = subscriptions.get(userId) || subscriptions.get(seedUserId)!;
 
-      const { transcript, beatStyle, bpm, durationSeconds, challengeId } = req.body;
+      const { transcript, lyrics, beatStyle, bpm, durationSeconds, challengeId } = req.body;
+      const actualText = transcript || lyrics || '';
 
-      if (!transcript || transcript.trim().length === 0) {
+      if (!actualText || actualText.trim().length === 0) {
         return res.status(400).json({ error: 'Nenhum texto de rima fornecido para análise.' });
       }
 
       const duration = Number(durationSeconds) || 30;
 
       // 1. Run Deterministic Heuristics
-      const deterministicResult = analyzeRhymesDeterministically(transcript, duration);
+      const deterministicResult = analyzeRhymesDeterministically(actualText, duration);
 
       let finalAnalysis = { ...deterministicResult };
       let aiCalled = false;
@@ -506,55 +507,71 @@ async function startServer() {
         try {
           const aiResponse = await ai.models.generateContent({
             model: 'gemini-3.7-flash',
-            contents: `Você é um juiz e mestre experiente de batalhas de rap e freestyle (estilo Batalha da Aldeia / Red Bull FrancaMente).
-Analise a seguinte letra/transcrição de freestyle gravada pelo MC:
+            contents: `Você é um Jurado e Especialista Técnico Profissional de Batalhas de Rima e Freestyle (estilo jurado experiente da Batalha da Aldeia, Red Bull FrancaMente e Batalha do Museu).
+Sua missão é dar uma avaliação real, honesta e técnica da transcrição do MC.
+DIRETRIZES DE POSTURA:
+- Não seja arrogante nem grosseiro, mas NUNCA passe pano ou use elogios vazios/genéricos.
+- Vá DIRETO AO PONTO: aponte a métrica, a divisão das sílabas no compasso, o nível das rimas (se foram rimas pobres/óbvias com verbos no infinitivo como cantar/falar, ou rimas ricas/multissilábicas), a força da punchline e o encaixe no BPM.
+- Dê correções práticas e cirúrgicas para o MC evoluir de verdade.
 
-ESTILO DO BEAT: ${beatStyle || 'Boom Bap'}
-BPM: ${bpm || 90}
-DURAÇÃO DA PRÁTICA: ${duration} segundos
-TRANSCRIÇÃO DO MC:
+CONTEXTO DA SESSÃO:
+- ESTILO DO BEAT: ${beatStyle || 'Boom Bap'}
+- BPM: ${bpm || 90}
+- DURAÇÃO DA SESSÃO: ${duration} segundos
+- TRANSCRIÇÃO DO MC:
 """
-${transcript}
+${actualText}
 """
 
-ANÁLISE HEURÍSTICA PRÉVIA:
-- Palavras totais: ${deterministicResult.wordsCount}
-- Rimas identificadas: ${deterministicResult.rhymesCount}
+ANÁLISE DE DADOS DA SESSÃO:
+- Total de palavras: ${deterministicResult.wordsCount}
+- Pares de rima computados: ${deterministicResult.rhymesCount}
 - Diversidade lexical: ${Math.round(deterministicResult.uniqueWordsRatio * 100)}%
 
-Avalie com critério técnico em português do Brasil, fornecendo notas de 0 a 100, pontos fortes reais, melhorias práticas e sugestão do próximo exercício.`,
+Avalie com o olhar crítico de um jurado profissional em português do Brasil e retorne o JSON estruturado.`,
             config: {
               responseMimeType: 'application/json',
               responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                  aiScore: { type: Type.INTEGER, description: 'Nota geral do freestyle de 0 a 100' },
-                  rhymeQuality: { type: Type.INTEGER, description: 'Qualidade técnica das rimas de 0 a 100' },
-                  flowScore: { type: Type.INTEGER, description: 'Cadência, ritmo e divisão métrica de 0 a 100' },
-                  creativityScore: { type: Type.INTEGER, description: 'Criatividade, vocabulário e metáforas de 0 a 100' },
-                  coherenceScore: { type: Type.INTEGER, description: 'Coerência do tema e storytelling de 0 a 100' },
+                  aiScore: { type: Type.INTEGER, description: 'Nota geral técnica e realista do freestyle de 0 a 100' },
+                  evaluationVerdict: {
+                    type: Type.STRING,
+                    description: 'Veredito direto: Lendário, Excelente, Sólido, Em Evolução, ou Precisa de Ajustes'
+                  },
+                  rhymeQuality: { type: Type.INTEGER, description: 'Nível técnico das rimas (evitando rimas óbvias) de 0 a 100' },
+                  metricScore: { type: Type.INTEGER, description: 'Métrica, divisão silábica e tempo de 0 a 100' },
+                  flowScore: { type: Type.INTEGER, description: 'Cadência, ritmo e encaixe no BPM de 0 a 100' },
+                  punchlineImpact: { type: Type.INTEGER, description: 'Força e impacto do ataque/desfecho de 0 a 100' },
+                  creativityScore: { type: Type.INTEGER, description: 'Criatividade lexical e metáforas de 0 a 100' },
+                  coherenceScore: { type: Type.INTEGER, description: 'Coerência temática de 0 a 100' },
+                  directFeedback: {
+                    type: Type.STRING,
+                    description: 'Avaliação técnica direta, concisa e sem rodeios (2 a 4 frases assertivas sem arrogância)'
+                  },
                   strengths: {
                     type: Type.ARRAY,
                     items: { type: Type.STRING },
-                    description: '2 a 3 pontos fortes destacados na rima'
+                    description: '2 a 3 pontos fortes técnicos e concretos'
                   },
                   improvements: {
                     type: Type.ARRAY,
                     items: { type: Type.STRING },
-                    description: '2 a 3 pontos de melhoria com dicas práticas'
+                    description: '2 a 3 pontos de melhoria técnica bem específicos'
                   },
-                  suggestions: {
+                  corrections: {
                     type: Type.ARRAY,
                     items: { type: Type.STRING },
-                    description: '1 a 2 técnicas específicas para treinar agora'
+                    description: '1 a 2 correções cirúrgicas de versos ou palavras (ex: substituição de rima fraca por uma rica)'
                   },
-                  punchlineFeedback: { type: Type.STRING, description: 'Comentário sobre o impacto das punchlines' },
-                  nextExercise: { type: Type.STRING, description: 'Próximo exercício recomendado' },
-                  aiCommentary: { type: Type.STRING, description: 'Comentário personalizado motivador de um mestre de rap' }
+                  punchlineFeedback: { type: Type.STRING, description: 'Análise objetiva do fechamento e impacto da punchline' },
+                  flowTips: { type: Type.STRING, description: 'Dica de respiração e divisão rítmica para o BPM específico' },
+                  nextExercise: { type: Type.STRING, description: 'Treino prático recomendado para a próxima sessão' },
+                  aiCommentary: { type: Type.STRING, description: 'Resumo rápido do mentor técnico' }
                 },
                 required: [
-                  'aiScore', 'rhymeQuality', 'flowScore', 'creativityScore', 'coherenceScore',
-                  'strengths', 'improvements', 'suggestions', 'nextExercise', 'aiCommentary'
+                  'aiScore', 'evaluationVerdict', 'rhymeQuality', 'metricScore', 'flowScore', 'punchlineImpact',
+                  'creativityScore', 'coherenceScore', 'directFeedback', 'strengths', 'improvements', 'nextExercise', 'aiCommentary'
                 ]
               }
             }
@@ -563,25 +580,39 @@ Avalie com critério técnico em português do Brasil, fornecendo notas de 0 a 1
           if (aiResponse.text) {
             const aiData = JSON.parse(aiResponse.text);
             
-            // Weighted hybrid score: 40% deterministic + 60% AI evaluation
+            // Weighted hybrid score: 35% deterministic + 65% AI evaluation
             const hybridOverallScore = Math.round(
-              deterministicResult.heuristicScore * 0.4 + aiData.aiScore * 0.6
+              deterministicResult.heuristicScore * 0.35 + aiData.aiScore * 0.65
             );
+
+            let verdict: 'Lendário' | 'Excelente' | 'Sólido' | 'Em Evolução' | 'Precisa de Ajustes' = 'Sólido';
+            if (aiData.evaluationVerdict) {
+              const v = aiData.evaluationVerdict;
+              if (['Lendário', 'Excelente', 'Sólido', 'Em Evolução', 'Precisa de Ajustes'].includes(v)) {
+                verdict = v as any;
+              }
+            }
 
             finalAnalysis = {
               ...deterministicResult,
               overallScore: Math.min(100, Math.max(20, hybridOverallScore)),
               aiScore: aiData.aiScore,
+              evaluationVerdict: verdict,
               rhymeQuality: aiData.rhymeQuality || deterministicResult.rhymeQuality,
+              metricScore: aiData.metricScore || deterministicResult.metricScore || 75,
               flowScore: aiData.flowScore || deterministicResult.flowScore,
+              punchlineImpact: aiData.punchlineImpact || deterministicResult.punchlineImpact || 70,
               creativityScore: aiData.creativityScore || deterministicResult.creativityScore,
               coherenceScore: aiData.coherenceScore || deterministicResult.coherenceScore,
+              directFeedback: aiData.directFeedback || aiData.aiCommentary || deterministicResult.directFeedback,
               strengths: aiData.strengths && aiData.strengths.length > 0 ? aiData.strengths : deterministicResult.strengths,
               improvements: aiData.improvements && aiData.improvements.length > 0 ? aiData.improvements : deterministicResult.improvements,
               suggestions: aiData.suggestions && aiData.suggestions.length > 0 ? aiData.suggestions : deterministicResult.suggestions,
-              punchlineFeedback: aiData.punchlineFeedback,
+              corrections: aiData.corrections && aiData.corrections.length > 0 ? aiData.corrections : deterministicResult.corrections,
+              punchlineFeedback: aiData.punchlineFeedback || deterministicResult.punchlineFeedback,
+              flowTips: aiData.flowTips || deterministicResult.flowTips,
               nextExercise: aiData.nextExercise || deterministicResult.nextExercise,
-              aiCommentary: aiData.aiCommentary,
+              aiCommentary: aiData.directFeedback || aiData.aiCommentary || deterministicResult.aiCommentary,
             };
 
             sub.aiQuotaUsed += 1;
@@ -593,7 +624,6 @@ Avalie com critério técnico em português do Brasil, fornecendo notas de 0 a 1
       }
 
       // 3. XP Calculation & Gamification Ledger
-      // Base: +50 XP for rhyme attempt, +100 for session, +10 XP per minute
       const timeBonus = Math.round((duration / 60) * 10);
       const scoreBonus = Math.round(finalAnalysis.overallScore * 0.5);
       const totalEarnedXP = 50 + 100 + timeBonus + scoreBonus;
@@ -636,7 +666,7 @@ Avalie com critério técnico em português do Brasil, fornecendo notas de 0 a 1
         beatStyle: beatStyle || 'Boom Bap',
         bpm: bpm || 90,
         durationSeconds: duration,
-        transcript,
+        transcript: actualText,
         analysis: finalAnalysis,
         xpEarned: totalEarnedXP,
         createdAt: new Date().toISOString(),
@@ -660,6 +690,333 @@ Avalie com critério técnico em português do Brasil, fornecendo notas de 0 a 1
     } catch (err: any) {
       console.error('Error analyzing practice session:', err);
       res.status(500).json({ error: err.message || 'Erro ao processar análise da rima.' });
+    }
+  });
+
+  // Multimodal AI Audio Transcription (Speed Flow & Rap Acapella to Lyrics)
+  app.post('/api/transcribe-audio', async (req, res) => {
+    try {
+      const { audioBase64, mimeType } = req.body;
+      if (!audioBase64) {
+        return res.status(400).json({ error: 'Nenhum dado de áudio fornecido.' });
+      }
+
+      const ai = getGeminiClient();
+      if (!ai) {
+        return res.status(503).json({
+          error: 'Serviço de transcrição IA indisponível (chave Gemini não configurada).',
+          transcript: '',
+        });
+      }
+
+      // Clean base64 string if data URL prefix exists
+      const cleanBase64 = audioBase64.includes('base64,')
+        ? audioBase64.split('base64,')[1]
+        : audioBase64;
+
+      const audioPart = {
+        inlineData: {
+          data: cleanBase64,
+          mimeType: mimeType || 'audio/webm',
+        },
+      };
+
+      const promptPart = {
+        text: `Você é um especialista em transcrição de rap, batalhas de freestyle e speed flow em português do Brasil.
+Transcreva com extrema fidelidade tudo o que a pessoa rimou ou falou neste áudio.
+
+Diretrizes Críticas:
+1. Capture cada verso, métrica e fonema, inclusive speed flow rápido, trocadilhos, punchlines e gírias do hip-hop brasileiro.
+2. Divida os versos em linhas de rap (versos de 4 a 8 compassos ou quebras naturais de respiração/rima).
+3. Se houver partes cantadas ou rimadas em velocidade extrema (speed flow), decodifique com cuidado para manter o significado e o ritmo.
+4. Retorne apenas o JSON com o formato solicitado.`,
+      };
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.7-flash',
+        contents: { parts: [audioPart, promptPart] },
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              transcript: { type: Type.STRING, description: 'Transcrição completa formatada em versos com quebras de linha' },
+              speedFlowDetected: { type: Type.BOOLEAN, description: 'Se foi identificado trecho de rima em speed flow / alta velocidade' },
+              speedFlowNotes: { type: Type.STRING, description: 'Observação sobre a cadência e velocidade' },
+              wordsCount: { type: Type.INTEGER, description: 'Contagem estimada de palavras' },
+            },
+            required: ['transcript', 'speedFlowDetected'],
+          },
+        },
+      });
+
+      if (response.text) {
+        const result = JSON.parse(response.text);
+        return res.json({
+          success: true,
+          transcript: result.transcript || '',
+          speedFlowDetected: result.speedFlowDetected || false,
+          speedFlowNotes: result.speedFlowNotes || '',
+          wordsCount: result.wordsCount || 0,
+        });
+      }
+
+      res.json({ success: true, transcript: '' });
+    } catch (err: any) {
+      console.error('Audio transcription error:', err);
+      res.status(500).json({ error: err.message || 'Erro ao transcrever áudio.' });
+    }
+  });
+
+  // AI Prompt & Theme Generator
+  app.post('/api/ai/prompt-generator', async (req, res) => {
+    try {
+      const { category, difficulty } = req.body;
+      const ai = getGeminiClient();
+
+      if (ai) {
+        try {
+          const response = await ai.models.generateContent({
+            model: 'gemini-3.7-flash',
+            contents: `Gere um desafio criativo e estimulante de freestyle de rap para treino de MC.
+Categoria: ${category || 'Filosofia Urbana & Cotidiano'}
+Dificuldade: ${difficulty || 'MÉDIO'}
+
+Gere um título marcante, uma proposta de tema profunda, 3 palavras obrigatórias de rima desafiadoras e 1 dica de flow.`,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  theme: { type: Type.STRING },
+                  requiredWords: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: '3 palavras obrigatórias para rimar'
+                  },
+                  flowTip: { type: Type.STRING },
+                  suggestedBpm: { type: Type.INTEGER },
+                },
+                required: ['title', 'theme', 'requiredWords', 'flowTip', 'suggestedBpm'],
+              },
+            },
+          });
+
+          if (response.text) {
+            const data = JSON.parse(response.text);
+            return res.json({ success: true, prompt: data });
+          }
+        } catch (e) {
+          console.warn('AI prompt gen error:', e);
+        }
+      }
+
+      // Fallback generator
+      const fallbackPrompts = [
+        {
+          title: 'Metáforas do Concreto',
+          theme: 'Como a correria da cidade grande molda os sonhos de quem veio de baixo',
+          requiredWords: ['labirinto', 'superação', 'horizonte'],
+          flowTip: 'Alterne entre versos cadenciados de 4 tempos e uma aceleração de speed flow no final.',
+          suggestedBpm: 92,
+        },
+        {
+          title: 'O Espelho e a Sombra',
+          theme: 'Luta interna entre o ego e a evolução artística verdadeira',
+          requiredWords: ['reflexo', 'resiliência', 'essência'],
+          flowTip: 'Use rimas internas no meio do verso para criar efeito eco.',
+          suggestedBpm: 88,
+        },
+      ];
+      const randomPrompt = fallbackPrompts[Math.floor(Math.random() * fallbackPrompts.length)];
+      res.json({ success: true, prompt: randomPrompt });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Erro ao gerar tema.' });
+    }
+  });
+
+  // Discord BeatBot: Parse and Analyze Beat Link or Search Query
+  app.post('/api/bot/parse-link', async (req, res) => {
+    try {
+      const { query } = req.body;
+      if (!query || typeof query !== 'string' || !query.trim()) {
+        return res.status(400).json({ error: 'Comando ou link inválido.' });
+      }
+
+      const cleanQuery = query.trim();
+      const isUrl = /^https?:\/\//i.test(cleanQuery);
+
+      // 1. YouTube Link Detection
+      const ytMatch = cleanQuery.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+      
+      // 2. Direct Audio Link (.mp3, .wav, .ogg, .aac, .m4a, stream)
+      const isDirectAudio = /\.(mp3|wav|ogg|aac|m4a)(\?.*)?$/i.test(cleanQuery);
+
+      // 3. Spotify Link
+      const isSpotify = /spotify\.com/i.test(cleanQuery);
+
+      // 4. SoundCloud Link
+      const isSoundCloud = /soundcloud\.com/i.test(cleanQuery);
+
+      let title = cleanQuery;
+      let style = 'Boom Bap';
+      let bpm = 90;
+      let key = 'C Min';
+      let producer = 'Web Audio Stream';
+      let energy: 'Chill' | 'Médio' | 'Agressivo' | 'Épico' = 'Médio';
+      let durationFormatted = '03:15';
+      let thumbnailUrl = '';
+      let audioUrl = isDirectAudio ? cleanQuery : '';
+      let source: 'synth' | 'custom' | 'youtube' | 'stream' = isDirectAudio ? 'custom' : (ytMatch ? 'youtube' : 'synth');
+
+      if (ytMatch) {
+        const videoId = ytMatch[1];
+        thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+        title = `YouTube Beat #${videoId.slice(0, 6)}`;
+        producer = 'YouTube Audio';
+      }
+
+      // Check keywords for style & BPM inference
+      const lower = cleanQuery.toLowerCase();
+      if (lower.includes('trap') || lower.includes('808')) {
+        style = 'Trap';
+        bpm = 140;
+        energy = 'Agressivo';
+        key = 'F Min';
+      } else if (lower.includes('drill') || lower.includes('uk drill')) {
+        style = 'Drill';
+        bpm = 142;
+        energy = 'Agressivo';
+        key = 'E Min';
+      } else if (lower.includes('lofi') || lower.includes('lo-fi') || lower.includes('chill') || lower.includes('relax')) {
+        style = 'Lo-Fi';
+        bpm = 82;
+        energy = 'Chill';
+        key = 'A Maj';
+      } else if (lower.includes('speed') || lower.includes('fast') || lower.includes('rapido') || lower.includes('double')) {
+        style = 'Speed Flow';
+        bpm = 112;
+        energy = 'Épico';
+        key = 'G Min';
+      } else if (lower.includes('grime')) {
+        style = 'Grime';
+        bpm = 140;
+        energy = 'Épico';
+        key = 'D Min';
+      } else if (lower.includes('boombap') || lower.includes('boom bap') || lower.includes('90s') || lower.includes('old school')) {
+        style = 'Boom Bap';
+        bpm = 92;
+        energy = 'Médio';
+        key = 'C Min';
+      }
+
+      // Extract BPM if user specified (e.g. "beat 135 bpm" or "/bpm 140")
+      const bpmMatch = cleanQuery.match(/(\d{2,3})\s*(?:bpm|BPM)/i);
+      if (bpmMatch) {
+        const parsed = parseInt(bpmMatch[1], 10);
+        if (parsed >= 60 && parsed <= 200) {
+          bpm = parsed;
+        }
+      }
+
+      // Clean title from URL params or prefix
+      if (isUrl) {
+        try {
+          const urlObj = new URL(cleanQuery);
+          const pathname = urlObj.pathname.split('/').filter(Boolean).pop() || '';
+          if (pathname && !ytMatch) {
+            title = decodeURIComponent(pathname).replace(/[-_]/g, ' ').replace(/\.(mp3|wav|ogg)$/i, '');
+            title = title.charAt(0).toUpperCase() + title.slice(1);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      // Try Gemini AI to enhance beat description and provide freestyle flow tips
+      const ai = getGeminiClient();
+      let aiFlowTip = 'Mantenha a respiração sincronizada a cada 4 compassos para encaixar a rima.';
+      if (ai) {
+        try {
+          const prompt = `O usuário no app de freestyle RimaLab digitou o comando de música /play: "${cleanQuery}".
+Analise este título/link e retorne um JSON com:
+1. title: título formatado e profissional do beat de rap/trap/freestyle
+2. style: um de ["Boom Bap", "Trap", "Drill", "Lo-Fi", "Grime", "Speed Flow"]
+3. bpm: número inteiro sugerido entre 70 e 160
+4. key: tom musical (ex: "C Min", "F# Min")
+5. producer: produtor sugerido ou artista
+6. energy: um de ["Chill", "Médio", "Agressivo", "Épico"]
+7. flowTip: dica tática de como rimar e encaixar o flow nesse tipo de beat
+8. durationFormatted: ex "03:20"`;
+
+          const aiResp = await ai.models.generateContent({
+            model: 'gemini-3.7-flash',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  style: { type: Type.STRING },
+                  bpm: { type: Type.INTEGER },
+                  key: { type: Type.STRING },
+                  producer: { type: Type.STRING },
+                  energy: { type: Type.STRING },
+                  flowTip: { type: Type.STRING },
+                  durationFormatted: { type: Type.STRING },
+                },
+                required: ['title', 'style', 'bpm', 'key', 'flowTip'],
+              },
+            },
+          });
+
+          if (aiResp.text) {
+            const parsedAi = JSON.parse(aiResp.text);
+            if (parsedAi.title) title = parsedAi.title;
+            if (parsedAi.style) style = parsedAi.style;
+            if (parsedAi.bpm) bpm = parsedAi.bpm;
+            if (parsedAi.key) key = parsedAi.key;
+            if (parsedAi.producer) producer = parsedAi.producer;
+            if (parsedAi.energy) energy = parsedAi.energy;
+            if (parsedAi.flowTip) aiFlowTip = parsedAi.flowTip;
+            if (parsedAi.durationFormatted) durationFormatted = parsedAi.durationFormatted;
+          }
+        } catch (aiErr) {
+          console.warn('AI link parse warning:', aiErr);
+        }
+      }
+
+      const beatObj = {
+        id: `custom_${Date.now()}`,
+        title,
+        style,
+        bpm,
+        key,
+        producer,
+        energy,
+        description: `Beat selecionado via Discord Bot. Dica de Flow: ${aiFlowTip}`,
+        audioUrl,
+        source,
+        thumbnailUrl: thumbnailUrl || (ytMatch ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg` : undefined),
+        durationFormatted,
+        flowTip: aiFlowTip,
+        originalQuery: cleanQuery,
+      };
+
+      res.json({
+        success: true,
+        beat: beatObj,
+        isYouTube: !!ytMatch,
+        youtubeVideoId: ytMatch ? ytMatch[1] : null,
+        isDirectAudio,
+        isSpotify,
+        isSoundCloud,
+      });
+    } catch (err: any) {
+      console.error('Bot parse link error:', err);
+      res.status(500).json({ error: err.message || 'Erro ao processar comando do bot.' });
     }
   });
 
