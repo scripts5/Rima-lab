@@ -1,0 +1,11 @@
+{
+  "name": "RimaLab",
+  "description": "Plataforma SaaS de treinamento de rimas e freestyle com IA, reconhecimento de voz e gamificação.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
