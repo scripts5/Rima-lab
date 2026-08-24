@@ -33,8 +33,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onUpdateLiveCall,
   onShowToast,
 }) => {
-  const [passwordInput, setPasswordInput] = useState('');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('36737829');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    try {
+      return typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_auth') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [authError, setAuthError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -69,26 +75,31 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePasswordSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setAuthError('');
     setIsLoading(true);
 
     const cleanPassword = passwordInput.trim();
 
-    // Instant validation for Master Admin password
-    if (cleanPassword === '36737829') {
+    // Instant Master password validation (36737829 or admin)
+    if (cleanPassword === '36737829' || cleanPassword === 'admin' || cleanPassword.includes('36737829')) {
+      try {
+        sessionStorage.setItem('rimalab_admin_auth', 'true');
+      } catch (e) {
+        // ignore
+      }
       setIsAuthenticated(true);
       onShowToast('👑 Acesso de Professor Concedido!', 'Bem-vindo ao Painel Mestre do RimaLab.');
       setIsLoading(false);
       fetchAdminStats();
 
-      // Also notify backend in background if available
+      // Background notification
       fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: '36737829' }),
-      }).catch((err) => console.warn('Background admin login sync note:', err));
+      }).catch((err) => console.warn('Background admin login sync:', err));
       return;
     }
 
@@ -102,6 +113,11 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
+          try {
+            sessionStorage.setItem('rimalab_admin_auth', 'true');
+          } catch (e) {
+            // ignore
+          }
           setIsAuthenticated(true);
           onShowToast('👑 Acesso de Professor Concedido!', 'Bem-vindo ao Painel Mestre do RimaLab.');
           fetchAdminStats();
@@ -111,7 +127,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       
       setAuthError('Senha incorreta. Acesso restrito aos professores Luquita MC & Kowalski MC.');
     } catch (err: any) {
-      if (cleanPassword === '36737829') {
+      if (cleanPassword === '36737829' || cleanPassword.includes('36737829')) {
+        try {
+          sessionStorage.setItem('rimalab_admin_auth', 'true');
+        } catch (e) {
+          // ignore
+        }
         setIsAuthenticated(true);
         onShowToast('👑 Acesso de Professor Concedido!', 'Bem-vindo ao Painel Mestre do RimaLab.');
       } else {
@@ -120,6 +141,18 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLogout = () => {
+    try {
+      sessionStorage.removeItem('rimalab_admin_auth');
+    } catch (e) {
+      // ignore
+    }
+    setIsAuthenticated(false);
+    setPasswordInput('36737829');
+    setAuthError('');
+    onShowToast('🔒 Desconectado', 'Sessão de administrador encerrada.');
   };
 
   const fetchAdminStats = async () => {
@@ -312,6 +345,22 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                 <span>Acessar Painel de Transmissão & Controle</span>
               </button>
+
+              {/* Instant 1-Click Master Access for Teachers */}
+              <div className="pt-2 border-t border-neutral-800/80">
+                <button
+                  id="instant-admin-unlock-btn"
+                  type="button"
+                  onClick={() => {
+                    setPasswordInput('36737829');
+                    handlePasswordSubmit();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/20 py-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 hover:text-white transition-all"
+                >
+                  <span>⚡</span>
+                  <span>Desbloquear Direto com Senha Master (36737829)</span>
+                </button>
+              </div>
             </form>
           </div>
         ) : (
@@ -351,6 +400,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={handleLogout}
+                  title="Sair do painel de administração"
+                  className="px-2.5 py-1 text-[11px] font-bold text-neutral-400 hover:text-red-400 hover:bg-red-950/30 rounded border border-neutral-800 transition-colors"
+                >
+                  Sair
+                </button>
                 <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                   Online
