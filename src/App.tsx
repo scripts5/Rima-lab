@@ -24,11 +24,20 @@ import {
   DiscordBeatBot 
 } from './components/DiscordBeatBot';
 import { 
+  OnboardingLanding 
+} from './components/OnboardingLanding';
+import { 
   SubscriptionModal 
 } from './components/SubscriptionModal';
 import { 
   PromptGeneratorModal 
 } from './components/PromptGeneratorModal';
+import { 
+  AdminPanelModal 
+} from './components/AdminPanelModal';
+import { 
+  GmailAuthModal 
+} from './components/GmailAuthModal';
 import { 
   UserProfile, 
   Subscription, 
@@ -38,7 +47,9 @@ import {
   PracticeSession, 
   XPTransaction, 
   Beat, 
-  RhymeAnalysis 
+  RhymeAnalysis,
+  LiveCallSession,
+  TrialStatus
 } from './types';
 import { PRESET_BEATS, globalBeatEngine } from './lib/audio/beatEngine';
 import { LESSONS_DATA } from './data/lessons';
@@ -47,7 +58,7 @@ import { ACHIEVEMENTS_DATA } from './data/achievements';
 import confetti from 'canvas-confetti';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'studio' | 'bot' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard'>('studio');
+  const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard'>('onboarding');
   
   // Data States
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -57,6 +68,17 @@ export function App() {
   const [achievements, setAchievements] = useState<Achievement[]>(ACHIEVEMENTS_DATA);
   const [practiceSessions, setPracticeSessions] = useState<PracticeSession[]>([]);
   const [xpTransactions, setXpTransactions] = useState<XPTransaction[]>([]);
+  const [liveCall, setLiveCall] = useState<LiveCallSession | null>({
+    id: 'live_default',
+    isActive: true,
+    platform: 'discord',
+    url: 'https://discord.gg/rimalab',
+    title: 'Aula ao Vivo de Métrica & Freestyle',
+    description: 'Entre para rimar no beat e receber feedback com Kowalski MC & Luquita MC!',
+    hostName: 'Luquita MC & Kowalski MC',
+    startedAt: new Date().toISOString(),
+    targetTier: 'ALL',
+  });
 
   // Beat State
   const [isPlayingBeat, setIsPlayingBeat] = useState<boolean>(false);
@@ -73,6 +95,8 @@ export function App() {
   // Modals
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState<boolean>(false);
   const [isPromptGenOpen, setIsPromptGenOpen] = useState<boolean>(false);
+  const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
+  const [isGmailAuthOpen, setIsGmailAuthOpen] = useState<boolean>(false);
 
   // Toast Notification State
   const [toastMessage, setToastMessage] = useState<{ title: string; desc: string; type: 'xp' | 'ach' | 'info' } | null>(null);
@@ -80,6 +104,21 @@ export function App() {
   const showToast = (title: string, desc: string, type: 'xp' | 'ach' | 'info' = 'xp') => {
     setToastMessage({ title, desc, type });
     setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // Fetch Live Call Broadcast
+  const fetchLiveCall = async () => {
+    try {
+      const res = await fetch('/api/live-call');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.liveCall) {
+          setLiveCall(data.liveCall);
+        }
+      }
+    } catch (e) {
+      console.warn('Live call fetch fallback:', e);
+    }
   };
 
   // Fetch Dashboard & Profile on Startup
@@ -99,40 +138,14 @@ export function App() {
         }
       } catch (err) {
         console.warn('Using local fallback state:', err);
-        // Local Seed Fallback
-        setProfile({
-          id: 'prof_demo_01',
-          userId: 'user_demo_01',
-          artisticName: 'MC Foco & Flow',
-          tagline: 'Mestre da Métrica & Freestyle',
-          bio: 'Treinando rimas diárias no RimaLab para dominar as batalhas e o improviso.',
-          favoriteStyle: 'Boom Bap',
-          level: 2,
-          totalXP: 1450,
-          streakDays: 4,
-          lastPracticeDate: new Date().toISOString(),
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          isPublic: true,
-          showStats: true,
-          showHistory: true,
-          totalSessions: 6,
-          totalMinutesPracticed: 18,
-          bestScore: 92,
-          totalWordsRhymed: 340,
-        });
-
-        setSubscription({
-          userId: 'user_demo_01',
-          plan: 'PRO',
-          status: 'ACTIVE',
-          validUntil: '2027-12-31T23:59:59Z',
-          aiMonthlyQuota: 100,
-          aiQuotaUsed: 8,
-        });
       }
     };
 
     fetchUserData();
+    fetchLiveCall();
+
+    const interval = setInterval(fetchLiveCall, 20000);
+    return () => clearInterval(interval);
   }, []);
 
   // Handler: Save Freestyle Practice Session
@@ -258,25 +271,52 @@ export function App() {
   };
 
   // Handler: Upgrade Plan
-  const handleUpgradePlan = async (plan: 'FREE' | 'PRO' | 'PREMIUM'): Promise<boolean> => {
+  const handleUpgradePlan = async (plan: 'FREE_TRIAL' | 'MONTHLY' | 'ANNUAL' | 'PRO' | 'PREMIUM'): Promise<boolean> => {
     try {
       const res = await fetch('/api/subscription/upgrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
+        body: JSON.stringify({ targetPlan: plan }),
       });
       if (res.ok) {
         const data = await res.json();
         if (data.subscription) setSubscription(data.subscription);
-        showToast('👑 Plano Atualizado!', `Seu plano agora é ${plan}!`, 'ach');
+        showToast(
+          '👑 Plano Atualizado!',
+          plan === 'ANNUAL' ? 'Plano Anual VIP ativado!' : plan === 'MONTHLY' ? 'Plano Mensal ativado!' : 'Plano atualizado!',
+          'ach'
+        );
         return true;
       }
     } catch (err) {
       console.warn('Subscription update fallback:', err);
     }
-    if (subscription) setSubscription({ ...subscription, plan, aiMonthlyQuota: plan === 'PREMIUM' ? 500 : 100 });
-    showToast('👑 Plano Atualizado!', `Seu plano agora é ${plan}!`, 'ach');
+    if (subscription) setSubscription({ ...subscription, plan: plan as any });
+    showToast('👑 Plano Atualizado!', 'Acesso aos novos recursos liberado!', 'ach');
     return true;
+  };
+
+  // Handler: Update Live Call from Admin
+  const handleUpdateLiveCall = async (callData: Partial<LiveCallSession>): Promise<boolean> => {
+    if (liveCall) {
+      setLiveCall({
+        ...liveCall,
+        ...callData,
+      } as LiveCallSession);
+    }
+    return true;
+  };
+
+  // Handler: Login with Gmail Success
+  const handleGmailLoginSuccess = (user: any, userProfile: UserProfile, userSub: Subscription, trialStatus: TrialStatus) => {
+    setProfile(userProfile);
+    setSubscription(userSub);
+    confetti({
+      particleCount: 50,
+      spread: 60,
+      origin: { y: 0.7 },
+      colors: ['#f59e0b', '#10b981', '#3b82f6'],
+    });
   };
 
   return (
@@ -301,8 +341,11 @@ export function App() {
         setActiveTab={setActiveTab}
         profile={profile}
         subscription={subscription}
+        liveCall={liveCall}
         onOpenSubscription={() => setIsSubscriptionOpen(true)}
         onOpenPromptGen={() => setIsPromptGenOpen(true)}
+        onOpenAdmin={() => setIsAdminOpen(true)}
+        onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
         isPlayingBeat={isPlayingBeat}
         onToggleBeat={() => {
           const playing = globalBeatEngine.togglePlay();
@@ -313,6 +356,34 @@ export function App() {
 
       {/* Main View Router */}
       <main className="flex-1 pb-12">
+        {activeTab === 'onboarding' && (
+          <OnboardingLanding
+            onEnterApp={(customProfile) => {
+              if (customProfile && profile) {
+                setProfile({ ...profile, ...customProfile });
+              }
+              setActiveTab('studio');
+            }}
+            onSelectBeatAndStart={(selectedBeat) => {
+              setCurrentBeat(selectedBeat);
+              globalBeatEngine.setBeat(selectedBeat);
+              globalBeatEngine.start();
+              setIsPlayingBeat(true);
+              setActiveTab('studio');
+              showToast('🎙️ Beat Carregado no Studio!', `Você está rimando com "${selectedBeat.title}".`, 'xp');
+            }}
+            isPlayingBeat={isPlayingBeat}
+            onToggleBeat={() => {
+              const playing = globalBeatEngine.togglePlay();
+              setIsPlayingBeat(playing);
+            }}
+            currentBeat={currentBeat}
+            onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
+            onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenSubscription={() => setIsSubscriptionOpen(true)}
+          />
+        )}
+
         {activeTab === 'studio' && (
           <FreestyleStudio
             profile={profile}
@@ -407,18 +478,39 @@ export function App() {
         }}
       />
 
+      <AdminPanelModal
+        isOpen={isAdminOpen}
+        onClose={() => setIsAdminOpen(false)}
+        currentLiveCall={liveCall}
+        onUpdateLiveCall={handleUpdateLiveCall}
+        onShowToast={showToast}
+      />
+
+      <GmailAuthModal
+        isOpen={isGmailAuthOpen}
+        onClose={() => setIsGmailAuthOpen(false)}
+        onLoginSuccess={handleGmailLoginSuccess}
+        onShowToast={showToast}
+      />
+
       {/* Footer */}
       <footer className="border-t border-neutral-900 bg-neutral-950 py-6 text-center text-xs text-neutral-500">
         <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-display font-bold text-neutral-300">RimaLab AI</span>
-            <span>— Plataforma de Treinamento de Freestyle & Rimas</span>
+          <div className="flex flex-col sm:flex-row items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="font-display font-bold text-neutral-200">RimaLab AI</span>
+              <span className="text-neutral-500">•</span>
+              <span className="text-amber-400 font-semibold">Criado por Luquita MC & Kowalski MC</span>
+            </div>
+            <span className="hidden md:inline text-neutral-600">— Plataforma de Treinamento de Freestyle & Rimas</span>
           </div>
           <div className="flex items-center gap-4">
+            <button onClick={() => setActiveTab('onboarding')} className="hover:text-amber-400 font-medium">🏠 Início</button>
+            <button onClick={() => setActiveTab('studio')} className="hover:text-neutral-300">Studio</button>
+            <button onClick={() => setActiveTab('bot')} className="hover:text-neutral-300">Bot Beats</button>
             <button onClick={() => setActiveTab('lessons')} className="hover:text-neutral-300">Academia</button>
-            <button onClick={() => setActiveTab('challenges')} className="hover:text-neutral-300">Desafios</button>
             <button onClick={() => setActiveTab('leaderboard')} className="hover:text-neutral-300">Ranking</button>
-            <button onClick={() => setIsSubscriptionOpen(true)} className="text-amber-500 hover:underline">Planos PRO</button>
+            <button onClick={() => setIsSubscriptionOpen(true)} className="text-amber-500 hover:underline font-bold">Planos PRO</button>
           </div>
         </div>
       </footer>

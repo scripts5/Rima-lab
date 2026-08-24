@@ -62,11 +62,35 @@ interface StoredPracticeSession {
 
 interface StoredSubscription {
   userId: string;
-  plan: 'FREE' | 'PRO' | 'PREMIUM';
-  status: 'ACTIVE';
+  plan: 'FREE' | 'PRO' | 'PREMIUM' | 'FREE_TRIAL' | 'MONTHLY' | 'ANNUAL';
+  status: 'ACTIVE' | 'EXPIRED';
   validUntil: string;
   aiMonthlyQuota: number;
   aiQuotaUsed: number;
+  trialDaysRemaining?: number;
+  registeredIp?: string;
+  gmail?: string;
+}
+
+interface IPTrialRecord {
+  ip: string;
+  firstEmail: string;
+  lastEmail: string;
+  trialStartedAt: number;
+  trialExpiresAt: number;
+  totalLogins: number;
+}
+
+interface LiveCallState {
+  id: string;
+  isActive: boolean;
+  platform: 'whatsapp' | 'discord' | 'meet' | 'zoom' | 'custom';
+  url: string;
+  title: string;
+  description: string;
+  hostName: string;
+  startedAt: string;
+  targetTier?: 'ALL' | 'MONTHLY' | 'ANNUAL';
 }
 
 // In-Memory Database State
@@ -77,6 +101,29 @@ const practiceSessions: StoredPracticeSession[] = [];
 const lessonCompletions: Map<string, Set<string>> = new Map(); // userId -> Set<lessonId>
 const userAchievements: Map<string, Map<string, { unlockedAt: string; progress: number }>> = new Map();
 const subscriptions: Map<string, StoredSubscription> = new Map();
+const ipTrials: Map<string, IPTrialRecord> = new Map();
+
+// Active Live Call broadcasted by Admin/Teachers (Kowalski MC & Luquita MC)
+let currentLiveCall: LiveCallState = {
+  id: 'live_default',
+  isActive: true,
+  platform: 'discord',
+  url: 'https://discord.gg/rimalab',
+  title: '🔥 Aula ao Vivo de Métrica & Rimas com os Professores',
+  description: 'Entre na chamada de voz e vídeo para treinar freestyle 1-a-1 com Luquita MC e Kowalski MC!',
+  hostName: 'Luquita MC & Kowalski MC',
+  startedAt: new Date().toISOString(),
+  targetTier: 'ALL',
+};
+
+// Client IP extractor helper
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string') {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.socket.remoteAddress || '127.0.0.1';
+}
 
 // Helper to calculate level from XP
 function calculateLevelDetails(xp: number) {
@@ -223,6 +270,276 @@ async function startServer() {
   // Healthcheck
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', time: new Date().toISOString(), service: 'RimaLab Core SaaS API' });
+  });
+
+  // Auth: Gmail Login with 14-Day Free Trial & IP Checking
+  app.post('/api/auth/gmail', (req, res) => {
+    try {
+      const { email, artisticName, favoriteStyle } = req.body;
+      if (!email || !email.includes('@')) {
+        return res.status(400).json({ error: 'Por favor, insira um endereço de Gmail/E-mail válido.' });
+      }
+
+      const clientIp = getClientIp(req);
+      const normalizedEmail = email.trim().toLowerCase();
+      const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      // Look up existing IP record
+      let ipRecord = ipTrials.get(clientIp);
+      let isNewIp = false;
+
+      if (!ipRecord) {
+        isNewIp = true;
+        ipRecord = {
+          ip: clientIp,
+          firstEmail: normalizedEmail,
+          lastEmail: normalizedEmail,
+          trialStartedAt: now,
+          trialExpiresAt: now + FOURTEEN_DAYS_MS,
+          totalLogins: 1,
+        };
+        ipTrials.set(clientIp, ipRecord);
+      } else {
+        ipRecord.lastEmail = normalizedEmail;
+        ipRecord.totalLogins += 1;
+      }
+
+      const isTrialExpired = now > ipRecord.trialExpiresAt;
+      const msRemaining = Math.max(0, ipRecord.trialExpiresAt - now);
+      const daysRemaining = Math.ceil(msRemaining / (24 * 60 * 60 * 1000));
+
+      // Find or create user
+      let foundUser: StoredUser | null = null;
+      for (const u of users.values()) {
+        if (u.email.toLowerCase() === normalizedEmail) {
+          foundUser = u;
+          break;
+        }
+      }
+
+      if (!foundUser) {
+        const userId = `user_g_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        foundUser = {
+          id: userId,
+          email: normalizedEmail,
+          passwordHash: 'gmail_oauth_pass',
+          role: 'USER',
+          createdAt: new Date().toISOString(),
+        };
+        users.set(userId, foundUser);
+
+        const initialArtistic = artisticName?.trim() || `MC ${normalizedEmail.split('@')[0]}`;
+        const newProfile: StoredProfile = {
+          id: `prof_${userId}`,
+          userId: userId,
+          artisticName: initialArtistic,
+          tagline: 'MC em Treinamento • 14 Dias Grátis',
+          bio: 'Estudando métrica, rimas ricas e punchlines no RimaLab AI.',
+          favoriteStyle: favoriteStyle || 'Boom Bap',
+          level: 1,
+          totalXP: 250,
+          streakDays: 1,
+          lastPracticeDate: new Date().toISOString(),
+          avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${userId}`,
+          isPublic: true,
+          showStats: true,
+          showHistory: true,
+          totalSessions: 0,
+          totalMinutesPracticed: 0,
+          bestScore: 0,
+          totalWordsRhymed: 0,
+        };
+        profiles.set(userId, newProfile);
+
+        const newSub: StoredSubscription = {
+          userId,
+          plan: isTrialExpired ? 'FREE' : 'FREE_TRIAL',
+          status: isTrialExpired ? 'EXPIRED' : 'ACTIVE',
+          validUntil: new Date(ipRecord.trialExpiresAt).toISOString(),
+          aiMonthlyQuota: 20,
+          aiQuotaUsed: 0,
+          trialDaysRemaining: daysRemaining,
+          registeredIp: clientIp,
+          gmail: normalizedEmail,
+        };
+        subscriptions.set(userId, newSub);
+      }
+
+      const profile = profiles.get(foundUser.id)!;
+      let subscription = subscriptions.get(foundUser.id)!;
+
+      // Update subscription trial fields based on IP record
+      if (subscription.plan === 'FREE_TRIAL' || subscription.plan === 'FREE') {
+        subscription.trialDaysRemaining = daysRemaining;
+        subscription.registeredIp = clientIp;
+        subscription.gmail = normalizedEmail;
+        subscription.validUntil = new Date(ipRecord.trialExpiresAt).toISOString();
+        if (isTrialExpired && subscription.plan === 'FREE_TRIAL') {
+          subscription.status = 'EXPIRED';
+        }
+      }
+
+      const token = `jwt_token_${foundUser.id}`;
+      const levelDetails = calculateLevelDetails(profile.totalXP);
+
+      const trialStatus = {
+        ip: clientIp,
+        email: normalizedEmail,
+        trialStartedAt: new Date(ipRecord.trialStartedAt).toISOString(),
+        trialExpiresAt: new Date(ipRecord.trialExpiresAt).toISOString(),
+        daysRemaining: daysRemaining,
+        isExpired: isTrialExpired,
+        hasActiveSubscription: subscription.plan === 'MONTHLY' || subscription.plan === 'ANNUAL' || subscription.plan === 'PRO' || subscription.plan === 'PREMIUM',
+        totalDays: 14,
+        isNewIp,
+        message: isTrialExpired 
+          ? 'Seu período de teste grátis de 14 dias para este dispositivo/IP expirou. Escolha um plano para continuar!'
+          : `Você possui ${daysRemaining} ${daysRemaining === 1 ? 'dia' : 'dias'} de teste grátis no seu IP.`
+      };
+
+      res.json({
+        user: { id: foundUser.id, email: foundUser.email, role: foundUser.role },
+        profile: { ...profile, levelDetails },
+        subscription,
+        trialStatus,
+        token,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Erro ao processar login com Gmail.' });
+    }
+  });
+
+  // Auth: Get current trial status for client IP
+  app.get('/api/auth/trial-status', (req, res) => {
+    const clientIp = getClientIp(req);
+    const ipRecord = ipTrials.get(clientIp);
+    const now = Date.now();
+    const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+
+    if (!ipRecord) {
+      return res.json({
+        ip: clientIp,
+        isRegistered: false,
+        daysRemaining: 14,
+        isExpired: false,
+        totalDays: 14,
+        message: 'Novo dispositivo/IP detectado! 14 dias de teste grátis disponíveis ao informar seu Gmail.',
+      });
+    }
+
+    const isTrialExpired = now > ipRecord.trialExpiresAt;
+    const msRemaining = Math.max(0, ipRecord.trialExpiresAt - now);
+    const daysRemaining = Math.ceil(msRemaining / (24 * 60 * 60 * 1000));
+
+    res.json({
+      ip: clientIp,
+      isRegistered: true,
+      email: ipRecord.lastEmail,
+      trialStartedAt: new Date(ipRecord.trialStartedAt).toISOString(),
+      trialExpiresAt: new Date(ipRecord.trialExpiresAt).toISOString(),
+      daysRemaining,
+      isExpired: isTrialExpired,
+      totalDays: 14,
+      totalLogins: ipRecord.totalLogins,
+      message: isTrialExpired 
+        ? 'Período de teste grátis de 14 dias encerrado para este IP.' 
+        : `${daysRemaining} dias de teste grátis restantes neste dispositivo.`,
+    });
+  });
+
+  // --- Live Call System (Students / Public) ---
+  app.get('/api/live-call', (req, res) => {
+    res.json({ liveCall: currentLiveCall });
+  });
+
+  // --- Admin Endpoints (Password Protected: 36737829) ---
+  app.post('/api/admin/login', (req, res) => {
+    const { password } = req.body;
+    if (password === '36737829') {
+      res.json({
+        success: true,
+        adminToken: 'adm_token_36737829',
+        adminName: 'Professores (Kowalski MC & Luquita MC)',
+        role: 'ADMIN',
+        message: 'Acesso Mestre Concedido! Bem-vindo ao painel de administração.',
+      });
+    } else {
+      res.status(401).json({ success: false, error: 'Senha de administrador incorreta. Acesso negado.' });
+    }
+  });
+
+  // Admin: Broadcast / Update Live Call Link (WhatsApp / Discord / Google Meet)
+  app.post('/api/admin/live-call', (req, res) => {
+    const { password, adminToken, platform, url, title, description, hostName, isActive, targetTier } = req.body;
+    
+    // Verify password or admin token
+    if (password !== '36737829' && adminToken !== 'adm_token_36737829') {
+      return res.status(401).json({ error: 'Não autorizado. Senha de admin inválida.' });
+    }
+
+    if (url) currentLiveCall.url = url.trim();
+    if (platform) currentLiveCall.platform = platform;
+    if (title) currentLiveCall.title = title.trim();
+    if (description !== undefined) currentLiveCall.description = description.trim();
+    if (hostName) currentLiveCall.hostName = hostName.trim();
+    if (isActive !== undefined) currentLiveCall.isActive = Boolean(isActive);
+    if (targetTier) currentLiveCall.targetTier = targetTier;
+    currentLiveCall.startedAt = new Date().toISOString();
+
+    res.json({
+      success: true,
+      message: currentLiveCall.isActive ? 'Chamada ao vivo transmitida para todos os alunos!' : 'Transmissão ao vivo encerrada.',
+      liveCall: currentLiveCall,
+    });
+  });
+
+  // Admin: View connected IPs and system metrics
+  app.get('/api/admin/stats', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'];
+    
+    if (pwdHeader !== '36737829' && authHeader !== 'Bearer adm_token_36737829') {
+      return res.status(401).json({ error: 'Acesso restrito ao Administrador.' });
+    }
+
+    const ipList = Array.from(ipTrials.values()).map(rec => {
+      const now = Date.now();
+      const isExpired = now > rec.trialExpiresAt;
+      const daysRemaining = Math.max(0, Math.ceil((rec.trialExpiresAt - now) / (24 * 60 * 60 * 1000)));
+      return {
+        ip: rec.ip,
+        firstEmail: rec.firstEmail,
+        lastEmail: rec.lastEmail,
+        trialStartedAt: new Date(rec.trialStartedAt).toISOString(),
+        trialExpiresAt: new Date(rec.trialExpiresAt).toISOString(),
+        daysRemaining,
+        isExpired,
+        totalLogins: rec.totalLogins,
+      };
+    });
+
+    const userList = Array.from(users.values()).map(u => {
+      const prof = profiles.get(u.id);
+      const sub = subscriptions.get(u.id);
+      return {
+        id: u.id,
+        email: u.email,
+        artisticName: prof?.artisticName || 'MC',
+        plan: sub?.plan || 'FREE',
+        totalXP: prof?.totalXP || 0,
+        sessions: prof?.totalSessions || 0,
+      };
+    });
+
+    res.json({
+      totalRegisteredIPs: ipTrials.size,
+      totalUsers: users.size,
+      totalPracticeSessions: practiceSessions.length,
+      currentLiveCall,
+      ipTrials: ipList,
+      users: userList,
+    });
   });
 
   // Auth: Register
@@ -1150,15 +1467,32 @@ Analise este título/link e retorne um JSON com:
       userId = authHeader.replace('Bearer jwt_token_', '');
     }
 
-    const { targetPlan } = req.body; // 'PRO' | 'PREMIUM'
-    const plan = targetPlan === 'PREMIUM' ? 'PREMIUM' : 'PRO';
+    const { targetPlan } = req.body; // 'MONTHLY' | 'ANNUAL' | 'PRO' | 'PREMIUM' | 'FREE_TRIAL'
+    let plan: 'FREE' | 'PRO' | 'PREMIUM' | 'FREE_TRIAL' | 'MONTHLY' | 'ANNUAL' = 'MONTHLY';
+    let quota = 150;
+
+    if (targetPlan === 'ANNUAL' || targetPlan === 'PREMIUM') {
+      plan = 'ANNUAL';
+      quota = 1000; // Ilimitado / VIP
+    } else if (targetPlan === 'MONTHLY' || targetPlan === 'PRO') {
+      plan = 'MONTHLY';
+      quota = 200;
+    } else if (targetPlan === 'FREE_TRIAL') {
+      plan = 'FREE_TRIAL';
+      quota = 20;
+    }
 
     const sub = subscriptions.get(userId) || subscriptions.get(seedUserId)!;
     sub.plan = plan;
-    sub.aiMonthlyQuota = plan === 'PREMIUM' ? 500 : 100;
-    sub.validUntil = '2027-12-31T23:59:59Z';
+    sub.status = 'ACTIVE';
+    sub.aiMonthlyQuota = quota;
+    sub.validUntil = plan === 'ANNUAL' ? '2028-12-31T23:59:59Z' : '2027-12-31T23:59:59Z';
 
-    res.json({ success: true, subscription: sub, message: `Plano atualizado com sucesso para ${plan}!` });
+    res.json({ 
+      success: true, 
+      subscription: sub, 
+      message: `Parabéns! Seu plano agora é ${plan === 'ANNUAL' ? 'Plano Anual VIP (Mentoria 1-a-1)' : 'Plano Mensal PRO'}!` 
+    });
   });
 
   // LGPD Compliance: Export and Delete Data

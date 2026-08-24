@@ -207,6 +207,42 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         </div>
       </div>
 
+      {/* Creators Hall of Fame Tribute Card */}
+      <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-950/30 via-neutral-900 to-orange-950/30 p-4 sm:p-5 shadow-lg">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-neutral-950 font-black text-lg shadow-md shadow-amber-500/20">
+              👑
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                  Hall da Fama dos Criadores
+                </span>
+                <span className="rounded bg-amber-500/20 px-1.5 py-0.2 text-[9px] font-black text-amber-300">
+                  FUNDADORES
+                </span>
+              </div>
+              <h3 className="font-display text-sm font-bold text-white">
+                Luquita MC & Kowalski MC
+              </h3>
+              <p className="text-xs text-neutral-400">
+                Pioneiros do RimaLab AI • Mestres da métrica, flow avançado e engenharia de rima.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <span className="rounded-lg bg-neutral-950 px-3 py-1.5 border border-amber-500/30 text-amber-300 font-bold">
+              🎤 Luquita MC [Honorário]
+            </span>
+            <span className="rounded-lg bg-neutral-950 px-3 py-1.5 border border-orange-500/30 text-orange-300 font-bold">
+              ⚡ Kowalski MC [Honorário]
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Leaderboard Table Card */}
       <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900/90 shadow-xl">
         <div className="overflow-x-auto">

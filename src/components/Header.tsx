@@ -15,17 +15,24 @@ import {
   Trophy, 
   Sliders,
   Headphones,
-  Terminal
+  Terminal,
+  ShieldCheck,
+  Radio,
+  Mail,
+  Video
 } from 'lucide-react';
-import { UserProfile, Subscription } from '../types';
+import { UserProfile, Subscription, LiveCallSession } from '../types';
 
 interface HeaderProps {
-  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot';
-  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot') => void;
+  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding';
+  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding') => void;
   profile: UserProfile | null;
   subscription: Subscription | null;
+  liveCall: LiveCallSession | null;
   onOpenSubscription: () => void;
   onOpenPromptGen: () => void;
+  onOpenAdmin: () => void;
+  onOpenGmailAuth: () => void;
   isPlayingBeat: boolean;
   onToggleBeat: () => void;
   currentBeatTitle: string;
@@ -36,8 +43,11 @@ export const Header: React.FC<HeaderProps> = ({
   setActiveTab,
   profile,
   subscription,
+  liveCall,
   onOpenSubscription,
   onOpenPromptGen,
+  onOpenAdmin,
+  onOpenGmailAuth,
   isPlayingBeat,
   onToggleBeat,
   currentBeatTitle,
@@ -50,14 +60,39 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-neutral-800/80 bg-neutral-950/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+      
+      {/* Active Teacher Live Call Global Top Banner */}
+      {liveCall?.isActive && (
+        <div className="bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 px-4 py-1.5 text-xs font-bold text-white shadow-inner flex items-center justify-between">
+          <div className="flex items-center gap-2 max-w-2xl truncate">
+            <span className="flex h-2 w-2 rounded-full bg-white animate-ping shrink-0" />
+            <span className="uppercase font-black text-[10px] tracking-wider bg-black/30 px-2 py-0.5 rounded">
+              🔴 AO VIVO COM OS PROFESSORES
+            </span>
+            <span className="truncate">{liveCall.title} ({liveCall.hostName})</span>
+          </div>
+          <a
+            id="join-live-banner-btn"
+            href={liveCall.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 bg-black hover:bg-neutral-900 text-amber-400 text-[11px] font-black px-3 py-1 rounded-full shadow transition-transform hover:scale-105 shrink-0"
+          >
+            <Video className="h-3.5 w-3.5 text-amber-400" />
+            <span>Entrar na Chamada de Vídeo</span>
+          </a>
+        </div>
+      )}
+
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-3 sm:px-6 py-2.5">
         
-        {/* Logo & Brand */}
+        {/* Logo & Brand + Creators Tribute */}
         <div className="flex items-center gap-3">
           <button
             id="brand-logo-btn"
-            onClick={() => setActiveTab('studio')}
+            onClick={() => setActiveTab('onboarding')}
             className="flex items-center gap-2.5 text-left group focus:outline-none"
+            title="Ir para o Dashboard de Apresentação & Início"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-red-600 shadow-lg shadow-amber-500/20 text-neutral-950 font-black text-xl tracking-tighter transition-transform group-hover:scale-105">
               <Mic className="h-5 w-5 text-neutral-950" />
@@ -71,15 +106,28 @@ export const Header: React.FC<HeaderProps> = ({
                   AI
                 </span>
               </div>
-              <p className="hidden text-[11px] text-neutral-400 sm:block">
-                Treinamento de Freestyle & Métrica
+              <p className="hidden text-[10px] text-amber-400/90 font-medium sm:block">
+                Por Luquita MC & Kowalski MC
               </p>
             </div>
           </button>
         </div>
 
         {/* Navigation Tabs */}
-        <nav className="hidden md:flex items-center gap-1 bg-neutral-900/90 p-1 rounded-xl border border-neutral-800">
+        <nav className="hidden lg:flex items-center gap-1 bg-neutral-900/90 p-1 rounded-xl border border-neutral-800">
+          <button
+            id="nav-onboarding-btn"
+            onClick={() => setActiveTab('onboarding')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'onboarding'
+                ? 'bg-neutral-800 text-amber-400 shadow-md font-bold border border-amber-500/30'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+            }`}
+            title="Área Inicial & Demonstração"
+          >
+            <span>🏠 Início</span>
+          </button>
+
           <button
             id="nav-studio-btn"
             onClick={() => setActiveTab('studio')}
@@ -173,8 +221,24 @@ export const Header: React.FC<HeaderProps> = ({
         </nav>
 
         {/* Actions & Status Stats */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 sm:gap-2.5">
           
+          {/* Gmail Login / 14 Days Free Trial Button */}
+          <button
+            id="header-gmail-btn"
+            onClick={onOpenGmailAuth}
+            title="Entrar com seu Gmail e garantir 14 Dias de Teste Grátis"
+            className="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-orange-500/10 px-2.5 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-all shadow-sm"
+          >
+            <Mail className="h-3.5 w-3.5 text-amber-400" />
+            <span className="hidden sm:inline">
+              {subscription?.gmail ? subscription.gmail.split('@')[0] : 'Entrar (Gmail)'}
+            </span>
+            <span className="rounded bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-black text-emerald-400 border border-emerald-500/30">
+              14d Grátis
+            </span>
+          </button>
+
           {/* Quick AI Topic Generator button */}
           <button
             id="header-prompt-gen-btn"
@@ -186,29 +250,10 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Tema IA</span>
           </button>
 
-          {/* Quick Beat Controller Pill */}
-          <div className="hidden lg:flex items-center gap-2 bg-neutral-900 px-2.5 py-1 rounded-lg border border-neutral-800">
-            <button
-              id="header-toggle-beat-btn"
-              onClick={onToggleBeat}
-              className={`p-1.5 rounded-md text-xs font-bold transition-all ${
-                isPlayingBeat
-                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                  : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
-              }`}
-              title={isPlayingBeat ? 'Pausar Beat' : 'Tocar Beat'}
-            >
-              {isPlayingBeat ? <Square className="h-3 w-3 fill-current" /> : <Play className="h-3 w-3 fill-current" />}
-            </button>
-            <div className="text-[11px] truncate max-w-[100px] text-neutral-400 font-medium">
-              {currentBeatTitle}
-            </div>
-          </div>
-
           {/* Streak Counter */}
           <div 
             title={`Sequência de treino: ${streak} dias seguidos`}
-            className="flex items-center gap-1 rounded-lg bg-orange-950/40 border border-orange-500/30 px-2 py-1 text-xs font-bold text-orange-400"
+            className="hidden sm:flex items-center gap-1 rounded-lg bg-orange-950/40 border border-orange-500/30 px-2 py-1 text-xs font-bold text-orange-400"
           >
             <Flame className="h-3.5 w-3.5 text-orange-500 fill-orange-500 animate-bounce" />
             <span>{streak}d</span>
@@ -217,13 +262,13 @@ export const Header: React.FC<HeaderProps> = ({
           {/* XP & Level Pill */}
           <div 
             onClick={() => setActiveTab('profile')}
-            className="cursor-pointer flex items-center gap-2 rounded-lg bg-neutral-900 border border-neutral-800 px-2.5 py-1 hover:border-amber-500/50 transition-colors"
+            className="cursor-pointer flex items-center gap-1.5 sm:gap-2 rounded-lg bg-neutral-900 border border-neutral-800 px-2 sm:px-2.5 py-1 hover:border-amber-500/50 transition-colors"
             title={`Nível ${level} • ${totalXP} XP acumulados (${progressPercent}% para o próximo)`}
           >
             <div className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/20 text-[10px] font-black text-amber-400">
               {level}
             </div>
-            <div className="flex flex-col text-left">
+            <div className="hidden sm:flex flex-col text-left">
               <span className="text-[10px] font-semibold text-neutral-400 leading-none">
                 {totalXP} XP
               </span>
@@ -241,21 +286,42 @@ export const Header: React.FC<HeaderProps> = ({
             id="header-plan-btn"
             onClick={onOpenSubscription}
             className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              subscription?.plan === 'PRO' || subscription?.plan === 'PREMIUM'
-                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-neutral-950 shadow'
+              subscription?.plan === 'ANNUAL' || subscription?.plan === 'PREMIUM'
+                ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-neutral-950 shadow'
+                : subscription?.plan === 'MONTHLY' || subscription?.plan === 'PRO'
+                ? 'bg-amber-500 text-neutral-950 shadow font-bold'
                 : 'border border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-amber-500/60 hover:text-amber-400'
             }`}
           >
             <Crown className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">
-              {subscription?.plan === 'PRO' ? 'PRO' : subscription?.plan === 'PREMIUM' ? 'PREMIUM' : 'FREE'}
+              {subscription?.plan === 'ANNUAL' || subscription?.plan === 'PREMIUM' ? 'VIP ANUAL' : subscription?.plan === 'MONTHLY' || subscription?.plan === 'PRO' ? 'MENSAL' : 'PLANOS'}
             </span>
+          </button>
+
+          {/* Teacher/Admin Button (Corner Feature with Password 36737829) */}
+          <button
+            id="header-admin-btn"
+            onClick={onOpenAdmin}
+            title="Área Restrita do Professor (Kowalski MC & Luquita MC) - Senha: 36737829"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg border border-red-500/40 bg-red-950/30 text-xs font-black text-red-400 hover:bg-red-900/40 hover:text-red-300 transition-all shadow-sm group"
+          >
+            <span className="text-[10px]">👑</span>
+            <span className="text-[11px] font-black uppercase tracking-wider">Admin</span>
           </button>
         </div>
       </div>
 
       {/* Mobile Bottom Sub-nav */}
-      <div className="flex md:hidden border-t border-neutral-800/60 bg-neutral-950 px-2 py-1.5 overflow-x-auto gap-1">
+      <div className="flex lg:hidden border-t border-neutral-800/60 bg-neutral-950 px-2 py-1.5 overflow-x-auto gap-1">
+        <button
+          onClick={() => setActiveTab('onboarding')}
+          className={`flex-1 py-1 px-2 text-center rounded text-xs font-semibold whitespace-nowrap ${
+            activeTab === 'onboarding' ? 'bg-neutral-800 text-amber-400 font-bold border border-amber-500/30' : 'text-neutral-400'
+          }`}
+        >
+          🏠 Início
+        </button>
         <button
           onClick={() => setActiveTab('studio')}
           className={`flex-1 py-1 px-2 text-center rounded text-xs font-semibold whitespace-nowrap ${

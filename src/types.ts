@@ -37,11 +37,37 @@ export interface UserProfile {
 
 export interface Subscription {
   userId: string;
-  plan: 'FREE' | 'PRO' | 'PREMIUM';
-  status: 'ACTIVE';
+  plan: 'FREE' | 'PRO' | 'PREMIUM' | 'FREE_TRIAL' | 'MONTHLY' | 'ANNUAL';
+  status: 'ACTIVE' | 'EXPIRED';
   validUntil: string;
   aiMonthlyQuota: number;
   aiQuotaUsed: number;
+  trialDaysRemaining?: number;
+  registeredIp?: string;
+  gmail?: string;
+}
+
+export interface TrialStatus {
+  ip: string;
+  email: string;
+  trialStartedAt: string;
+  trialExpiresAt: string;
+  daysRemaining: number;
+  isExpired: boolean;
+  hasActiveSubscription: boolean;
+  totalDays: number;
+}
+
+export interface LiveCallSession {
+  id: string;
+  isActive: boolean;
+  platform: 'whatsapp' | 'discord' | 'meet' | 'zoom' | 'custom';
+  url: string;
+  title: string;
+  description: string;
+  hostName: string;
+  startedAt: string;
+  targetTier?: 'ALL' | 'MONTHLY' | 'ANNUAL';
 }
 
 export interface XPTransaction {
