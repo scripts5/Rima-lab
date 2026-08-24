@@ -51,8 +51,9 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
   const [copied, setCopied] = useState(false);
   const [selectedBeatId, setSelectedBeatId] = useState(currentBeat.id);
 
-  const isCallActive = liveCall?.isActive && !!liveCall?.url;
-  const currentUrl = liveCall?.url || 'https://discord.gg/rimalab';
+  const isCallActive = liveCall ? (liveCall.isActive !== false) : true;
+  const rawUrl = (liveCall?.url || 'https://discord.gg/rimalab').trim();
+  const currentUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
   const platform = liveCall?.platform || 'discord';
 
   const handleCopyLink = () => {

@@ -13,6 +13,32 @@ export interface LevelDetails {
   progressPercent: number;
 }
 
+export type BattleTrainingType = 'gastacao' | 'ideologica' | 'sangue' | 'conhecimento';
+export type BeatStyleType = 'Boom Bap' | 'Trap' | 'Detroit' | 'Drill' | 'Lo-Fi' | 'Grime' | 'Speed Flow' | 'Custom';
+export type SkillFocusType = 'speedflow' | 'punchline' | 'encaixe_beat' | 'flow' | 'contagem_versos';
+
+export interface TrainingPreferences {
+  age?: number | string;
+  trainingType: BattleTrainingType;
+  beatStyle: BeatStyleType;
+  focusSkills: SkillFocusType[];
+}
+
+export interface CommunitySuggestion {
+  id: string;
+  authorName: string;
+  authorAge?: number | string;
+  category: 'beats' | 'vertente_rima' | 'recurso_site' | 'aulas_professores' | 'melhoria_ia';
+  title: string;
+  description: string;
+  upvotes: number;
+  hasUpvoted?: boolean;
+  tags: string[];
+  status: 'ANALISANDO' | 'EM_DESENVOLVIMENTO' | 'APROVADO_PROFESSORES' | 'IMPLEMENTADO';
+  createdAt: string;
+  teacherComment?: string;
+}
+
 export interface UserProfile {
   id: string;
   userId: string;
@@ -20,6 +46,9 @@ export interface UserProfile {
   tagline: string;
   bio: string;
   favoriteStyle: string;
+  age?: number | string;
+  trainingType?: BattleTrainingType;
+  focusSkills?: SkillFocusType[];
   level: number;
   totalXP: number;
   streakDays: number;
@@ -172,7 +201,7 @@ export interface Achievement {
 export interface Beat {
   id: string;
   title: string;
-  style: 'Boom Bap' | 'Trap' | 'Drill' | 'Lo-Fi' | 'Grime' | 'Speed Flow' | 'Custom';
+  style: 'Boom Bap' | 'Trap' | 'Detroit' | 'Drill' | 'Lo-Fi' | 'Grime' | 'Speed Flow' | 'Custom';
   bpm: number;
   key: string;
   producer: string;

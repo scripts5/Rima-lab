@@ -24,8 +24,8 @@ import {
 import { UserProfile, Subscription, LiveCallSession } from '../types';
 
 interface HeaderProps {
-  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls';
-  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls') => void;
+  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions';
+  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions') => void;
   profile: UserProfile | null;
   subscription: Subscription | null;
   liveCall: LiveCallSession | null;
@@ -226,6 +226,20 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           <button
+            id="nav-suggestions-btn"
+            onClick={() => setActiveTab('suggestions')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'suggestions'
+                ? 'bg-amber-500 text-neutral-950 shadow-md font-bold'
+                : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
+            }`}
+            title="Aba de Sugestões da Comunidade para o RimaLab"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+            <span>Sugestões 💡</span>
+          </button>
+
+          <button
             id="nav-profile-btn"
             onClick={() => setActiveTab('profile')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -318,15 +332,15 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </button>
 
-          {/* Teacher/Admin Button (Corner Feature with Password 36737829) */}
+          {/* Teacher/Admin Button */}
           <button
             id="header-admin-btn"
             onClick={onOpenAdmin}
-            title="Área Restrita do Professor (Kowalski MC & Luquita MC) - Senha: 36737829"
-            className="flex items-center gap-1 px-2 py-1 rounded-lg border border-red-500/40 bg-red-950/30 text-xs font-black text-red-400 hover:bg-red-900/40 hover:text-red-300 transition-all shadow-sm group"
+            title="Painel do Professor (Kowalski MC & Luquita MC)"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg border border-neutral-700 bg-neutral-900/80 text-xs font-bold text-neutral-400 hover:border-amber-500/50 hover:text-amber-300 transition-all shadow-sm group"
           >
             <span className="text-[10px]">👑</span>
-            <span className="text-[11px] font-black uppercase tracking-wider">Admin</span>
+            <span className="text-[11px] font-bold">Admin</span>
           </button>
         </div>
       </div>
@@ -400,6 +414,14 @@ export const Header: React.FC<HeaderProps> = ({
           }`}
         >
           Ranking
+        </button>
+        <button
+          onClick={() => setActiveTab('suggestions')}
+          className={`flex-1 py-1 px-2 text-center rounded text-xs font-semibold whitespace-nowrap ${
+            activeTab === 'suggestions' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-400'
+          }`}
+        >
+          Sugestões 💡
         </button>
         <button
           onClick={() => setActiveTab('profile')}

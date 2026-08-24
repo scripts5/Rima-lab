@@ -74,14 +74,26 @@ export const PRESET_BEATS: Beat[] = [
     durationFormatted: '03:00',
   },
   {
-    id: 'beat_detroit_punch',
-    title: 'Detroit Flute & 808 Aggressive',
-    style: 'Trap',
+    id: 'beat_detroit_pure_808',
+    title: 'Detroit 8 Mile Piano Stabs',
+    style: 'Detroit',
     bpm: 100,
+    key: 'F# Min',
+    producer: 'RimaLab Originals',
+    energy: 'Agressivo',
+    description: 'Acordes secos e rápidos de piano, sub 808 cortante e bateria de Detroit sincopada para flow fora do tempo e punchline pesada.',
+    source: 'synth',
+    durationFormatted: '02:55',
+  },
+  {
+    id: 'beat_detroit_punch',
+    title: 'Detroit Flute & 808 Off-Beat',
+    style: 'Detroit',
+    bpm: 98,
     key: 'C# Min',
     producer: 'Discord BeatBot Community',
     energy: 'Agressivo',
-    description: 'Linha de flauta contínua, bumbo sem corte e rimas fora do tempo características do flow de Detroit.',
+    description: 'Linha de flauta contínua, bumbo solto e rimas no contratempo características do flow clássico de Detroit.',
     source: 'synth',
     durationFormatted: '02:50',
   },
@@ -391,6 +403,26 @@ export class BeatEngine {
         this.playSquareBass(time, step === 6 ? 73.42 : 55.0);
       }
       this.playHiHat(time, 0.5, false);
+    } else if (style === 'Detroit') {
+      // Detroit Characteristic: Off-beat minor piano stabs, bouncy 808 and snapping claps
+      if (step === 0 || step === 3 || step === 8 || step === 11 || step === 14) {
+        this.playDetroitPianoStab(time, step % 2 === 0 ? 370 : 440);
+      }
+      // Heavy Detroit 808
+      if (step === 0 || step === 6 || step === 10) {
+        this.play808Bass(time, step === 6 ? 46.25 : 36.71, 0.4);
+      }
+      // Snare / Clap on 4, 12 with syncopated ghost roll on 15
+      if (step === 4 || step === 12) {
+        this.playClap(time, 1.0);
+      }
+      if (step === 15) {
+        this.playSnare(time, 0.45, 260, true);
+      }
+      // Bouncy hi-hats with swing
+      if (step % 2 === 0 || step === 7 || step === 13) {
+        this.playHiHat(time, step === 0 || step === 8 ? 0.55 : 0.35, false);
+      }
     } else if (style === 'Speed Flow') {
       // Driving double time
       if (step % 4 === 0) {
@@ -635,6 +667,35 @@ export class BeatEngine {
 
       osc.start(time);
       osc.stop(time + 1.6);
+    });
+  }
+
+  private playDetroitPianoStab(time: number, rootFreq = 370) {
+    if (!this.ctx || !this.masterGain) return;
+
+    // Minor triad stab: root, minor third, fifth
+    const notes = [rootFreq, rootFreq * 1.1892, rootFreq * 1.4983];
+    notes.forEach(f => {
+      const osc = this.ctx!.createOscillator();
+      const filter = this.ctx!.createBiquadFilter();
+      const gain = this.ctx!.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(f, time);
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(2200, time);
+      filter.frequency.exponentialRampToValueAtTime(600, time + 0.12);
+
+      gain.gain.setValueAtTime(0.12, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(time);
+      osc.stop(time + 0.14);
     });
   }
 

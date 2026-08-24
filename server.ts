@@ -24,6 +24,9 @@ interface StoredProfile {
   tagline: string;
   bio: string;
   favoriteStyle: string;
+  age?: number;
+  trainingType?: string;
+  focusSkills?: string[];
   level: number;
   totalXP: number;
   streakDays: number;
@@ -805,7 +808,7 @@ async function startServer() {
       const profile = profiles.get(userId) || profiles.get(seedUserId)!;
       const sub = subscriptions.get(userId) || subscriptions.get(seedUserId)!;
 
-      const { transcript, lyrics, beatStyle, bpm, durationSeconds, challengeId } = req.body;
+      const { transcript, lyrics, beatStyle, bpm, durationSeconds, challengeId, trainingType, focusSkills, userAge, age } = req.body;
       const actualText = transcript || lyrics || '';
 
       if (!actualText || actualText.trim().length === 0) {
@@ -813,6 +816,9 @@ async function startServer() {
       }
 
       const duration = Number(durationSeconds) || 30;
+      const mcAge = userAge || age || profile.age || 'Não especificada';
+      const vertente = trainingType || profile.trainingType || 'freestyle';
+      const skillsToFocus = Array.isArray(focusSkills) && focusSkills.length > 0 ? focusSkills.join(', ') : 'Geral (Métrica e Flow)';
 
       // 1. Run Deterministic Heuristics
       const deterministicResult = analyzeRhymesDeterministically(actualText, duration);
@@ -833,9 +839,12 @@ DIRETRIZES DE POSTURA:
 - Vá DIRETO AO PONTO: aponte a métrica, a divisão das sílabas no compasso, o nível das rimas (se foram rimas pobres/óbvias com verbos no infinitivo como cantar/falar, ou rimas ricas/multissilábicas), a força da punchline e o encaixe no BPM.
 - Dê correções práticas e cirúrgicas para o MC evoluir de verdade.
 
-CONTEXTO DA SESSÃO:
-- ESTILO DO BEAT: ${beatStyle || 'Boom Bap'}
+CALIBRAÇÃO DO TREINO DO MC:
+- IDADE DO MC: ${mcAge} anos
+- VERTENTE DO TREINO: ${vertente.toUpperCase()} ${vertente === 'gastacao' ? '(Foco em tiradas cômicas, deboche e humor de batalha 🟢)' : vertente === 'ideologica' ? '(Foco em filosofia de rua, mensagem, visão crítica e metáforas ⚪️)' : ''}
+- ESTILO DO BEAT: ${beatStyle || 'Boom Bap'} ${beatStyle === 'Detroit' ? '(Estilo Detroit / Michigan: avaliar o flow sincopado fora do tempo e batidas secas de piano)' : ''}
 - BPM: ${bpm || 90}
+- HABILIDADES EM FOCO: ${skillsToFocus}
 - DURAÇÃO DA SESSÃO: ${duration} segundos
 - TRANSCRIÇÃO DO MC:
 """
@@ -1448,6 +1457,112 @@ Analise este título/link e retorne um JSON com:
 
     const levelDetails = calculateLevelDetails(profile.totalXP);
     res.json({ success: true, xpEarned: chal.xpReward, profile: { ...profile, levelDetails } });
+  });
+
+  // Suggestions: In-memory store & endpoints
+  const serverSuggestions: any[] = [
+    {
+      id: 'sug_1',
+      authorName: 'MC Menor da Leste',
+      authorAge: 16,
+      category: 'vertente_rima',
+      title: 'Modo de Treino Especial: Gastação Cômica & Tiradas 🟢',
+      description: 'Adicionar temas focados puramente em humor, respostas irônicas e tiradas de deboche inteligente para batalhas tradicionais de gastação.',
+      upvotes: 48,
+      tags: ['#gastacao', '#humor', '#batalhadagastacao', '#tiradas'],
+      status: 'IMPLEMENTADO',
+      createdAt: '2026-08-20T14:30:00Z',
+      teacherComment: 'Luquita MC: Já adicionamos no estúdio! Agora você pode selecionar Gastação 🟢 no Hub de Treino.',
+    },
+    {
+      id: 'sug_2',
+      authorName: 'Kowalski MC & Luquita MC',
+      authorAge: 24,
+      category: 'beats',
+      title: 'Novos Beats no estilo Detroit & Michigan Bounce 🎹',
+      description: 'Bateria sincopada com piano seco e grave 808 rápido (98-100 BPM) para treinar punchline contínua e encaixe fora do tempo clássico de Detroit.',
+      upvotes: 62,
+      tags: ['#detroit', '#michiganflow', '#punchline', '#808'],
+      status: 'IMPLEMENTADO',
+      createdAt: '2026-08-22T10:15:00Z',
+      teacherComment: 'Kowalski MC: Beats de Detroit integrados no sintetizador do RimaLab! Treinem muito a respiração e o timing.',
+    },
+    {
+      id: 'sug_3',
+      authorName: 'MC Visão Crítica',
+      authorAge: 20,
+      category: 'vertente_rima',
+      title: 'Filtro de Rima Ideológica & Conhecimento Profundo ⚪️',
+      description: 'Temas voltados para filosofia de rua, metáforas sociais, política, história e expansão de vocabulário sem agressividade gratuita.',
+      upvotes: 39,
+      tags: ['#ideologica', '#conhecimento', '#filosofia', '#cultura'],
+      status: 'IMPLEMENTADO',
+      createdAt: '2026-08-21T18:00:00Z',
+      teacherComment: 'Luquita MC: Disponível na seleção do Hub! O Jurado IA agora avalia a profundidade dos argumentos na rima ideológica.',
+    },
+    {
+      id: 'sug_4',
+      authorName: 'MC Flecha Rápida',
+      authorAge: 17,
+      category: 'recurso_site',
+      title: 'Medidor Visual de Contagem de Versos & Entrada da Punchline 📐',
+      description: 'Uma barra visual de 4 tempos (Verso 1 ➔ Verso 2 ➔ Verso 3 ➔ PUNCHLINE!) para não perder o tempo da rima final nem atropelar a entrada.',
+      upvotes: 55,
+      tags: ['#contagemdeversos', '#punchline', '#tempo', '#compasso'],
+      status: 'IMPLEMENTADO',
+      createdAt: '2026-08-23T09:20:00Z',
+      teacherComment: 'Kowalski MC: Função crucial para quem quer vencer batalha de 1x1 ou 2x2. Adicionado no Studio!',
+    },
+    {
+      id: 'sug_5',
+      authorName: 'MC Dobra Certa',
+      authorAge: 19,
+      category: 'melhoria_ia',
+      title: 'Treino de Speedflow com Velocímetro de Sílabas por Segundo ⚡',
+      description: 'Detectar quando o MC faz rima rápida dobrada (acima de 6 sílabas por segundo) e dar feedback específico sobre a clareza da dicção.',
+      upvotes: 43,
+      tags: ['#speedflow', '#diccao', '#respiracao', '#velocidade'],
+      status: 'IMPLEMENTADO',
+      createdAt: '2026-08-19T11:00:00Z',
+      teacherComment: 'Luquita MC: O módulo de Speedflow já mede as sílabas e ativa o badge de fogo no estúdio.',
+    },
+  ];
+
+  app.get('/api/suggestions', (req, res) => {
+    res.json({ suggestions: serverSuggestions });
+  });
+
+  app.post('/api/suggestions', (req, res) => {
+    const { title, description, category, authorName, authorAge, tags } = req.body;
+    if (!title || !description) {
+      return res.status(400).json({ error: 'Título e descrição são obrigatórios.' });
+    }
+
+    const newSug = {
+      id: `sug_${Date.now()}`,
+      authorName: authorName || 'MC Anônimo',
+      authorAge: authorAge || undefined,
+      category: category || 'vertente_rima',
+      title: title.trim(),
+      description: description.trim(),
+      upvotes: 1,
+      tags: Array.isArray(tags) ? tags : [`#${category || 'geral'}`],
+      status: 'ANALISANDO',
+      createdAt: new Date().toISOString(),
+      teacherComment: 'Kowalski MC & Luquita MC: Recebido! Vamos analisar com a equipe de mentores.',
+    };
+
+    serverSuggestions.unshift(newSug);
+    res.json({ success: true, suggestion: newSug });
+  });
+
+  app.post('/api/suggestions/:id/upvote', (req, res) => {
+    const { id } = req.params;
+    const sug = serverSuggestions.find(s => s.id === id);
+    if (!sug) return res.status(404).json({ error: 'Sugestão não encontrada.' });
+
+    sug.upvotes += 1;
+    res.json({ success: true, upvotes: sug.upvotes });
   });
 
   // Subscription: Get & Upgrade

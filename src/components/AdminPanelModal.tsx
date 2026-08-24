@@ -35,7 +35,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onShowToast,
   onNavigateToCalls,
 }) => {
-  const [passwordInput, setPasswordInput] = useState('36737829');
+  const [passwordInput, setPasswordInput] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
       return typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_auth') === 'true';
@@ -138,7 +138,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setIsAuthenticated(true);
         onShowToast('👑 Acesso de Professor Concedido!', 'Bem-vindo ao Painel Mestre do RimaLab.');
       } else {
-        setAuthError('Senha incorreta. Digite a senha master de professor: 36737829');
+        setAuthError('Senha incorreta. Acesso restrito aos professores.');
       }
     } finally {
       setIsLoading(false);
@@ -152,7 +152,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       // ignore
     }
     setIsAuthenticated(false);
-    setPasswordInput('36737829');
+    setPasswordInput('');
     setAuthError('');
     onShowToast('🔒 Desconectado', 'Sessão de administrador encerrada.');
   };
@@ -219,10 +219,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   const handleBroadcastCall = async (activeState: boolean) => {
     setIsLoading(true);
+    const rawUrl = callUrl.trim();
+    const cleanUrl = rawUrl ? (/^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`) : 'https://discord.gg/rimalab';
+    setCallUrl(cleanUrl);
+
     const payload: any = {
       password: '36737829',
       platform,
-      url: callUrl.trim(),
+      url: cleanUrl,
       title: callTitle.trim(),
       description: callDescription.trim(),
       hostName: hostName.trim(),
@@ -306,7 +310,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               <div>
                 <p className="font-semibold text-white">Esta área é reservada para os professores e administradores da plataforma.</p>
                 <p className="text-neutral-400 mt-1">
-                  Digite a senha de administrador (<code className="text-amber-300 bg-neutral-950 px-1 py-0.5 rounded font-mono">36737829</code>) para transmitir links de videochamada (WhatsApp / Discord / Meet) para os alunos e gerenciar o sistema de IP e testes grátis.
+                  Insira a senha de acesso mestre de professor para gerenciar chamadas ao vivo, links de transmissão e métricas da plataforma.
                 </p>
               </div>
             </div>
@@ -347,22 +351,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                 <span>Acessar Painel de Transmissão & Controle</span>
               </button>
-
-              {/* Instant 1-Click Master Access for Teachers */}
-              <div className="pt-2 border-t border-neutral-800/80">
-                <button
-                  id="instant-admin-unlock-btn"
-                  type="button"
-                  onClick={() => {
-                    setPasswordInput('36737829');
-                    handlePasswordSubmit();
-                  }}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/20 py-2.5 text-xs font-bold text-amber-300 hover:bg-amber-500/20 hover:text-white transition-all"
-                >
-                  <span>⚡</span>
-                  <span>Desbloquear Direto com Senha Master (36737829)</span>
-                </button>
-              </div>
             </form>
           </div>
         ) : (

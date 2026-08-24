@@ -21,6 +21,9 @@ import {
   LeaderboardView 
 } from './components/LeaderboardView';
 import { 
+  SuggestionsTab 
+} from './components/SuggestionsTab';
+import { 
   DiscordBeatBot 
 } from './components/DiscordBeatBot';
 import { 
@@ -61,7 +64,7 @@ import { ACHIEVEMENTS_DATA } from './data/achievements';
 import confetti from 'canvas-confetti';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'calls' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard'>('onboarding');
+  const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'calls' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'suggestions'>('onboarding');
   
   // Data States
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -71,16 +74,22 @@ export function App() {
   const [achievements, setAchievements] = useState<Achievement[]>(ACHIEVEMENTS_DATA);
   const [practiceSessions, setPracticeSessions] = useState<PracticeSession[]>([]);
   const [xpTransactions, setXpTransactions] = useState<XPTransaction[]>([]);
-  const [liveCall, setLiveCall] = useState<LiveCallSession | null>({
-    id: 'live_default',
-    isActive: true,
-    platform: 'discord',
-    url: 'https://discord.gg/rimalab',
-    title: 'Aula ao Vivo de Métrica & Freestyle',
-    description: 'Entre para rimar no beat e receber feedback com Kowalski MC & Luquita MC!',
-    hostName: 'Luquita MC & Kowalski MC',
-    startedAt: new Date().toISOString(),
-    targetTier: 'ALL',
+  const [liveCall, setLiveCall] = useState<LiveCallSession | null>(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('rimalab_live_call') : null;
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      id: 'live_default',
+      isActive: true,
+      platform: 'discord',
+      url: 'https://discord.gg/rimalab',
+      title: 'Aula ao Vivo de Métrica & Freestyle',
+      description: 'Entre para rimar no beat e receber feedback com Kowalski MC & Luquita MC!',
+      hostName: 'Luquita MC & Kowalski MC',
+      startedAt: new Date().toISOString(),
+      targetTier: 'ALL',
+    };
   });
 
   // Beat State
@@ -117,6 +126,9 @@ export function App() {
         const data = await res.json();
         if (data.liveCall) {
           setLiveCall(data.liveCall);
+          try {
+            localStorage.setItem('rimalab_live_call', JSON.stringify(data.liveCall));
+          } catch {}
         }
       }
     } catch (e) {
@@ -301,11 +313,26 @@ export function App() {
 
   // Handler: Update Live Call from Admin
   const handleUpdateLiveCall = async (callData: Partial<LiveCallSession>): Promise<boolean> => {
-    if (liveCall) {
-      setLiveCall({
-        ...liveCall,
-        ...callData,
-      } as LiveCallSession);
+    const rawUrl = (callData.url || liveCall?.url || 'https://discord.gg/rimalab').trim();
+    const cleanUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+
+    const updated: LiveCallSession = {
+      id: callData.id || liveCall?.id || `live_${Date.now()}`,
+      isActive: callData.isActive !== undefined ? callData.isActive : true,
+      platform: callData.platform || liveCall?.platform || 'discord',
+      url: cleanUrl,
+      title: (callData.title || liveCall?.title || 'Mentoria ao Vivo de Freestyle').trim(),
+      description: (callData.description || liveCall?.description || 'Entre na sala de voz/vídeo para treino 1-a-1 com Luquita MC & Kowalski MC.').trim(),
+      hostName: (callData.hostName || liveCall?.hostName || 'Luquita MC & Kowalski MC').trim(),
+      startedAt: callData.startedAt || new Date().toISOString(),
+      targetTier: callData.targetTier || liveCall?.targetTier || 'ALL',
+    };
+
+    setLiveCall(updated);
+    try {
+      localStorage.setItem('rimalab_live_call', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Storage save fallback', e);
     }
     return true;
   };
@@ -469,6 +496,14 @@ export function App() {
         {activeTab === 'leaderboard' && (
           <LeaderboardView
             currentProfile={profile}
+          />
+        )}
+
+        {activeTab === 'suggestions' && (
+          <SuggestionsTab
+            profile={profile}
+            onOpenStudio={() => setActiveTab('studio')}
+            onShowToast={showToast}
           />
         )}
 

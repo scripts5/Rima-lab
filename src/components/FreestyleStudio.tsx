@@ -30,7 +30,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Beat, RhymeAnalysis, UserProfile } from '../types';
+import { Beat, RhymeAnalysis, UserProfile, BattleTrainingType, SkillFocusType } from '../types';
 import { PRESET_BEATS, globalBeatEngine } from '../lib/audio/beatEngine';
 import { SpeechHandler } from '../lib/speech/speechRecognition';
 
@@ -76,6 +76,16 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
   const [metronome, setMetronome] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [currentBeatNumber, setCurrentBeatNumber] = useState<number>(1);
+  const [currentBarNumber, setCurrentBarNumber] = useState<number>(1);
+  const [totalBarsCounted, setTotalBarsCounted] = useState<number>(0);
+
+  // Personalized Training Configuration (User requested: Age, Training Goal, Beat, Skills)
+  const [mcAge, setMcAge] = useState<number | string>(profile?.age || 18);
+  const [trainingType, setTrainingType] = useState<BattleTrainingType>(profile?.trainingType || 'gastacao');
+  const [focusSkills, setFocusSkills] = useState<SkillFocusType[]>(
+    profile?.focusSkills || ['speedflow', 'punchline', 'encaixe_beat', 'flow', 'contagem_versos']
+  );
+  const [isConfigExpanded, setIsConfigExpanded] = useState<boolean>(true);
 
   // Speech & Recording State
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -134,6 +144,13 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
     globalBeatEngine.setOnStepCallback((step, beatNum) => {
       setCurrentStep(step);
       setCurrentBeatNumber(beatNum);
+      if (step === 0) {
+        setTotalBarsCounted(prev => {
+          const next = prev + 1;
+          setCurrentBarNumber(((next - 1) % 4) + 1);
+          return next;
+        });
+      }
     });
 
     // Auto-attempt starting camera if available
@@ -456,8 +473,11 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
           beatStyle: currentBeat.style,
           bpm: bpm,
           durationSeconds: Math.max(sessionSeconds, 20),
-          theme: activeChallengeTheme?.theme || 'Freestyle Livre',
+          theme: activeChallengeTheme?.theme || (trainingType === 'gastacao' ? 'Batalha de Gastação & Humor 🟢' : trainingType === 'ideologica' ? 'Rima Ideológica & Conhecimento ⚪️' : 'Freestyle Livre'),
           requiredWords: activeChallengeTheme?.requiredWords || [],
+          trainingType,
+          focusSkills,
+          userAge: mcAge,
         }),
       });
 
@@ -493,14 +513,20 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
   };
 
   // Sample verses injection for quick testing
-  const injectSampleVerse = (type: 'boombap' | 'drill' | 'speedflow') => {
+  const injectSampleVerse = (type: 'gastacao' | 'ideologica' | 'detroit' | 'speedflow' | 'boombap' | 'drill') => {
     let sample = '';
-    if (type === 'boombap') {
-      sample = `Entro na batida com postura e visão\nCada verso que eu solto vem direto do coração\nNo asfalto da cidade busco superação\nO microfone é a arma da minha evolução`;
+    if (type === 'gastacao') {
+      sample = `Olha a cara desse mano achando que é o rei do flow\nChegou de terno e gravata parecendo que veio pro show\nMas na hora da rima esquece o que decorou\nAté o microfone riu da piada que ele soltou!`;
+    } else if (type === 'ideologica') {
+      sample = `A poesia de rua não se cala perante a opressão\nTransformo cada linha em semente pra nossa libertação\nNão rimo por vaidade mas sim por pura convicção\nO conhecimento é a chave que abre qualquer prisão!`;
+    } else if (type === 'detroit') {
+      sample = `Tô no flow de Michigan descompassado sem perder a linha\nBati de frente com a caixa solta que a levada é minha\nPunchline pesada no piano que atropela a covardia\nSe vacilar no tempo o grave 808 te ensina a rima sadia!`;
     } else if (type === 'drill') {
       sample = `Deslizo no grave 808 daquele jeito\nRima cortante que exige respeito\nMantenho a postura sem nenhum defeito\nFaço o improviso bater no seu peito`;
-    } else {
+    } else if (type === 'speedflow') {
       sample = `Acelero o flow na velocidade máxima da mente\nDisparo rimas afiadas pra calar qualquer concorrente\nO raciocínio é veloz a cada segundo presente\nNenhum adversário segura o impacto desse repente`;
+    } else {
+      sample = `Entro na batida com postura e visão\nCada verso que eu solto vem direto do coração\nNo asfalto da cidade busco superação\nO microfone é a arma da minha evolução`;
     }
     setTranscript(sample);
     extractLiveRhymeSuggestions(sample);
@@ -573,6 +599,215 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
           </div>
         </div>
       )}
+
+      {/* Personalized Training Configuration Hub (Age, Vertente, Beat, Skills) */}
+      <div className="rounded-2xl border border-amber-500/30 bg-neutral-900/90 p-4 sm:p-5 shadow-xl space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-neutral-950 font-black text-sm shadow-md">
+              🎯
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-sm sm:text-base font-extrabold text-white">
+                  Hub de Treino & Calibração de Foco
+                </h3>
+                <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-400 border border-emerald-500/30">
+                  IA CALIBRADA
+                </span>
+              </div>
+              <p className="text-xs text-neutral-400">
+                Personalize sua idade, vertente (Gastação 🟢 / Ideológica ⚪️), estilo de beat e técnicas para treinar.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsConfigExpanded(!isConfigExpanded)}
+            className="flex items-center gap-1.5 text-xs font-bold text-amber-400 hover:text-amber-300 transition-colors"
+          >
+            <Sliders className="h-3.5 w-3.5" />
+            <span>{isConfigExpanded ? 'Ocultar Opções' : 'Ajustar Foco de Treino'}</span>
+          </button>
+        </div>
+
+        {isConfigExpanded && (
+          <div className="space-y-4 pt-1 animate-in fade-in duration-200">
+            {/* Row 1: Idade & Quer Treinar O Quê (Vertente) */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+              
+              {/* Idade do MC */}
+              <div className="md:col-span-4 rounded-xl border border-neutral-800 bg-neutral-950/80 p-3 space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                  🎂 Idade do MC:
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="8"
+                    max="99"
+                    value={mcAge}
+                    onChange={(e) => setMcAge(e.target.value)}
+                    placeholder="Ex: 17"
+                    className="w-20 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-white font-bold focus:border-amber-500 focus:outline-none"
+                  />
+                  <div className="flex flex-wrap items-center gap-1">
+                    {[14, 16, 18, 21, 25].map((agePreset) => (
+                      <button
+                        key={agePreset}
+                        type="button"
+                        onClick={() => setMcAge(agePreset)}
+                        className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${
+                          Number(mcAge) === agePreset
+                            ? 'bg-amber-500 text-neutral-950'
+                            : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
+                        }`}
+                      >
+                        {agePreset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <span className="text-[10px] text-neutral-500 block">
+                  Calibra as gírias, referências e rigor do Jurado IA.
+                </span>
+              </div>
+
+              {/* Quer Treinar O Quê? (Vertente) */}
+              <div className="md:col-span-8 rounded-xl border border-neutral-800 bg-neutral-950/80 p-3 space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                  🎤 Quer treinar o quê? (Vertente de Rima):
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { id: 'gastacao', label: 'Gastação', icon: '🟢', desc: 'Humor, deboche & tiradas cômicas' },
+                    { id: 'ideologica', label: 'Ideológica', icon: '⚪️', desc: 'Filosofia, visão & metáforas sociais' },
+                    { id: 'sangue', label: 'Sangue', icon: '🔴', desc: 'Ataque direto, firmeza & impacto' },
+                    { id: 'conhecimento', label: 'Conhecimento', icon: '🧠', desc: 'História, cultura & vocabulário rico' },
+                  ].map((v) => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => {
+                        setTrainingType(v.id as any);
+                        if (v.id === 'gastacao') {
+                          injectSampleVerse('gastacao');
+                        } else if (v.id === 'ideologica') {
+                          injectSampleVerse('ideologica');
+                        }
+                      }}
+                      className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
+                        trainingType === v.id
+                          ? 'bg-amber-500/15 border-amber-500 shadow-md ring-1 ring-amber-500/40'
+                          : 'bg-neutral-900/60 border-neutral-800 hover:border-neutral-700 text-neutral-400'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-xs">
+                        <span>{v.icon}</span>
+                        <span className={trainingType === v.id ? 'text-amber-300' : 'text-white'}>
+                          {v.label}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-neutral-400 leading-tight mt-1">
+                        {v.desc}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Treinar em Qual Beat & Foco Técnico */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+              
+              {/* Treinar em Qual Beat */}
+              <div className="md:col-span-6 rounded-xl border border-neutral-800 bg-neutral-950/80 p-3 space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                  🎹 Treinar em qual beat?
+                </label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: 'Detroit', label: 'Detroit', icon: '🎹', bpm: 100, desc: 'Michigan Off-Beat' },
+                    { id: 'Trap', label: 'Trap', icon: '🔥', bpm: 140, desc: '808 Pesado & Hi-Hats' },
+                    { id: 'Boom Bap', label: 'Boom Bap', icon: '🎙️', bpm: 90, desc: 'Groove 90s Clássico' },
+                    { id: 'Drill', label: 'Drill', icon: '⚡', bpm: 142, desc: 'Grave Deslizante' },
+                    { id: 'Grime', label: 'Grime', icon: '🇬🇧', bpm: 140, desc: '140 BPM Ataque' },
+                    { id: 'Speed Flow', label: 'Speed Flow', icon: '🏃', bpm: 108, desc: 'Alta Rotação' },
+                  ].map((st) => {
+                    const isCurrent = currentBeat.style === st.id;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => {
+                          const matchedBeat = PRESET_BEATS.find(b => b.style === st.id) || PRESET_BEATS[0];
+                          setCurrentBeat(matchedBeat);
+                          setBpm(matchedBeat.bpm);
+                        }}
+                        className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all ${
+                          isCurrent
+                            ? 'bg-amber-500 text-neutral-950 border-amber-500 font-black shadow-md'
+                            : 'bg-neutral-900/80 text-neutral-300 border-neutral-800 hover:border-neutral-700'
+                        }`}
+                      >
+                        <span className="text-sm mb-0.5">{st.icon}</span>
+                        <span className="text-xs font-bold">{st.label}</span>
+                        <span className={`text-[9px] ${isCurrent ? 'text-neutral-900 font-bold' : 'text-neutral-500'}`}>
+                          {st.bpm} BPM
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Treinar Técnicas & Habilidades */}
+              <div className="md:col-span-6 rounded-xl border border-neutral-800 bg-neutral-950/80 p-3 space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                  ⚡ Treinar Habilidades Técnicas:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                  {[
+                    { id: 'speedflow' as SkillFocusType, label: 'Speedflow', icon: '⚡' },
+                    { id: 'punchline' as SkillFocusType, label: 'Punchline', icon: '🥊' },
+                    { id: 'encaixe_beat' as SkillFocusType, label: 'Encaixar no Beat', icon: '🎯' },
+                    { id: 'flow' as SkillFocusType, label: 'Variação de Flow', icon: '🌊' },
+                    { id: 'contagem_versos' as SkillFocusType, label: 'Contagem de Versos', icon: '📐' },
+                  ].map((skill) => {
+                    const isSelected = focusSkills.includes(skill.id);
+                    return (
+                      <button
+                        key={skill.id}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setFocusSkills(focusSkills.filter(s => s !== skill.id));
+                          } else {
+                            setFocusSkills([...focusSkills, skill.id]);
+                          }
+                        }}
+                        className={`flex items-center gap-1.5 p-2 rounded-lg border text-xs font-bold transition-all ${
+                          isSelected
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500 shadow-sm'
+                            : 'bg-neutral-900/60 text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                        }`}
+                      >
+                        <span>{skill.icon}</span>
+                        <span className="truncate">{skill.label}</span>
+                        {isSelected && <span className="text-[10px] text-amber-400 ml-auto">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="text-[10px] text-neutral-500 block">
+                  O Jurado IA e o HUD ao vivo vão priorizar as técnicas selecionadas.
+                </span>
+              </div>
+
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Main Studio Interactive Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -807,6 +1042,72 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
                 <span>{cameraError}</span>
               </div>
             )}
+
+            {/* Contagem de Versos & Encaixe de Punchline Visual Track */}
+            <div className="mt-3 rounded-xl border border-neutral-800 bg-neutral-900/90 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">📐</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-neutral-300">
+                    Contagem de Versos & Entrada da Punchline
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-mono text-neutral-400">
+                  <span>Tempo:</span>
+                  <span className="font-black text-amber-400">{bpm} BPM</span>
+                  <span className="text-neutral-600">|</span>
+                  <span>Compasso {currentBarNumber} / 4</span>
+                </div>
+              </div>
+
+              {/* 4-Bar Visual Sequence */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { bar: 1, label: '1. Setup / Entrada', desc: 'Apresenta a ideia', color: 'border-blue-500/40 bg-blue-950/20 text-blue-300' },
+                  { bar: 2, label: '2. Desenvolvimento', desc: 'Rima intermediária', color: 'border-cyan-500/40 bg-cyan-950/20 text-cyan-300' },
+                  { bar: 3, label: '3. Preparação', desc: 'Cria expectativa', color: 'border-amber-500/40 bg-amber-950/20 text-amber-300' },
+                  { bar: 4, label: '4. 💥 PUNCHLINE!', desc: 'Impacto & Desfecho', color: 'border-red-500/60 bg-red-950/30 text-red-300' },
+                ].map((item) => {
+                  const isActive = isPlayingBeat && currentBarNumber === item.bar;
+                  const isPunchline = item.bar === 4;
+                  return (
+                    <div
+                      key={item.bar}
+                      className={`relative overflow-hidden rounded-xl border p-2 text-center transition-all ${
+                        isActive
+                          ? isPunchline
+                            ? 'border-red-500 bg-red-500/25 ring-2 ring-red-500 shadow-lg shadow-red-500/20 scale-[1.02]'
+                            : 'border-amber-500 bg-amber-500/20 ring-2 ring-amber-500/40 shadow-md scale-[1.01]'
+                          : 'border-neutral-800 bg-neutral-950/60 text-neutral-400 opacity-75'
+                      }`}
+                    >
+                      <div className="text-[11px] font-black leading-none truncate">
+                        {item.label}
+                      </div>
+                      <div className="text-[9px] text-neutral-400 mt-1 truncate">
+                        {item.desc}
+                      </div>
+                      {isActive && (
+                        <div className="mt-1 flex items-center justify-center gap-1">
+                          {[1, 2, 3, 4].map((stepDot) => (
+                            <span
+                              key={stepDot}
+                              className={`h-1.5 w-1.5 rounded-full transition-all ${
+                                currentBeatNumber === stepDot
+                                  ? isPunchline
+                                    ? 'bg-red-400 scale-125'
+                                    : 'bg-amber-400 scale-125'
+                                  : 'bg-neutral-600'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Studio Controls (Play, Record, BPM, Volume) */}
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-neutral-800/80">
@@ -1125,25 +1426,40 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
             </div>
 
             {/* Quick Demo Verse Injectors for Testing */}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="text-[11px] font-semibold text-neutral-400">Exemplos rápidos:</span>
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] font-semibold text-neutral-400">Versos exemplo:</span>
+              <button
+                onClick={() => injectSampleVerse('gastacao')}
+                className="rounded-md bg-emerald-950/80 border border-emerald-500/40 hover:bg-emerald-900 px-2 py-1 text-[11px] font-bold text-emerald-300 transition-colors"
+                title="Exemplo de Rima de Gastação"
+              >
+                🟢 Gastação
+              </button>
+              <button
+                onClick={() => injectSampleVerse('ideologica')}
+                className="rounded-md bg-neutral-800 border border-neutral-600 hover:bg-neutral-700 px-2 py-1 text-[11px] font-bold text-neutral-200 transition-colors"
+                title="Exemplo de Rima Ideológica"
+              >
+                ⚪️ Ideológica
+              </button>
+              <button
+                onClick={() => injectSampleVerse('detroit')}
+                className="rounded-md bg-purple-950/80 border border-purple-500/40 hover:bg-purple-900 px-2 py-1 text-[11px] font-bold text-purple-300 transition-colors"
+                title="Exemplo de Flow Detroit"
+              >
+                🎹 Detroit
+              </button>
+              <button
+                onClick={() => injectSampleVerse('speedflow')}
+                className="rounded-md bg-orange-950/80 border border-orange-500/40 hover:bg-orange-900 px-2 py-1 text-[11px] font-bold text-orange-300 transition-colors"
+              >
+                ⚡ Speedflow
+              </button>
               <button
                 onClick={() => injectSampleVerse('boombap')}
                 className="rounded-md bg-neutral-800 hover:bg-neutral-700 px-2 py-1 text-[11px] font-medium text-neutral-300 transition-colors"
               >
-                Boom Bap
-              </button>
-              <button
-                onClick={() => injectSampleVerse('drill')}
-                className="rounded-md bg-neutral-800 hover:bg-neutral-700 px-2 py-1 text-[11px] font-medium text-neutral-300 transition-colors"
-              >
-                BR Drill
-              </button>
-              <button
-                onClick={() => injectSampleVerse('speedflow')}
-                className="rounded-md bg-neutral-800 hover:bg-neutral-700 px-2 py-1 text-[11px] font-medium text-orange-300 border border-orange-500/30 transition-colors"
-              >
-                🔥 Speed Flow
+                🎙️ Boombap
               </button>
             </div>
 

@@ -17,7 +17,7 @@ import {
   Users,
   Radio
 } from 'lucide-react';
-import { UserProfile, Beat } from '../types';
+import { UserProfile, Beat, BattleTrainingType, SkillFocusType } from '../types';
 import { PRESET_BEATS, globalBeatEngine } from '../lib/audio/beatEngine';
 
 interface OnboardingLandingProps {
@@ -42,7 +42,10 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
   onOpenSubscription,
 }) => {
   const [mcName, setMcName] = useState('MC Visitante');
-  const [selectedStyle, setSelectedStyle] = useState('Boom Bap');
+  const [mcAge, setMcAge] = useState<number | string>(18);
+  const [trainingType, setTrainingType] = useState<BattleTrainingType>('gastacao');
+  const [selectedStyle, setSelectedStyle] = useState('Detroit');
+  const [focusSkills, setFocusSkills] = useState<SkillFocusType[]>(['speedflow', 'punchline', 'encaixe_beat', 'flow', 'contagem_versos']);
   const [experienceLevel, setExperienceLevel] = useState<'iniciante' | 'intermediario' | 'batalhador'>('intermediario');
   const [activeDemoTab, setActiveDemoTab] = useState<'beats' | 'ai_judge' | 'studio' | 'battles'>('beats');
   const [demoPlayingId, setDemoPlayingId] = useState<string | null>(null);
@@ -51,8 +54,17 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
     e.preventDefault();
     onEnterApp({
       artisticName: mcName.trim() || 'MC Foco & Flow',
+      age: Number(mcAge) || 18,
+      trainingType,
       favoriteStyle: selectedStyle,
-      tagline: experienceLevel === 'batalhador' ? 'MC de Batalha Profissional' : experienceLevel === 'intermediario' ? 'Rimador em Ascensão' : 'Iniciante no Freestyle',
+      focusSkills,
+      tagline: trainingType === 'gastacao' 
+        ? 'MC Focado em Gastação & Tiradas 🟢' 
+        : trainingType === 'ideologica' 
+        ? 'MC de Rima Ideológica & Visão ⚪️' 
+        : experienceLevel === 'batalhador' 
+        ? 'MC de Batalha Profissional' 
+        : 'Rimador em Evolução',
       level: experienceLevel === 'batalhador' ? 3 : experienceLevel === 'intermediario' ? 2 : 1,
     });
   };
@@ -227,52 +239,131 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                   />
                 </div>
 
+                {/* Idade do MC */}
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                    Estilo Favorito de Beat:
+                    🎂 Idade do MC:
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="8"
+                      max="99"
+                      value={mcAge}
+                      onChange={(e) => setMcAge(e.target.value)}
+                      placeholder="Ex: 17"
+                      className="w-24 rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs text-white font-bold focus:border-amber-500 focus:outline-none"
+                    />
+                    <div className="flex flex-wrap items-center gap-1">
+                      {[14, 16, 18, 21, 25].map((agePreset) => (
+                        <button
+                          key={agePreset}
+                          type="button"
+                          onClick={() => setMcAge(agePreset)}
+                          className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${
+                            Number(mcAge) === agePreset
+                              ? 'bg-amber-500 text-neutral-950'
+                              : 'bg-neutral-950 text-neutral-400 hover:text-white border border-neutral-800'
+                          }`}
+                        >
+                          {agePreset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quer Treinar O Quê? (Gastação vs Ideológica) */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                    🎤 Quer treinar o quê?
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'gastacao', label: 'Gastação', icon: '🟢', desc: 'Humor & Tiradas Cômicas' },
+                      { id: 'ideologica', label: 'Ideológica', icon: '⚪️', desc: 'Visão & Argumentos de Rua' },
+                      { id: 'sangue', label: 'Sangue', icon: '🔴', desc: 'Ataque & Firmeza' },
+                      { id: 'conhecimento', label: 'Conhecimento', icon: '🧠', desc: 'Cultura & Vocabulário' },
+                    ].map((v) => (
+                      <button
+                        type="button"
+                        key={v.id}
+                        onClick={() => setTrainingType(v.id as any)}
+                        className={`flex flex-col items-start p-2 rounded-lg border transition-all ${
+                          trainingType === v.id
+                            ? 'bg-amber-500/20 text-white border-amber-500 shadow-sm'
+                            : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 text-xs font-bold">
+                          <span>{v.icon}</span>
+                          <span>{v.label}</span>
+                        </div>
+                        <span className="text-[10px] text-neutral-500 mt-0.5">{v.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Treinar em Qual Beat */}
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1">
+                    🎹 Treinar em qual beat?
                   </label>
                   <div className="grid grid-cols-3 gap-1.5">
-                    {['Boom Bap', 'Trap', 'Speed Flow', 'Grime', 'Drill', 'Detroit'].map((st) => (
+                    {['Detroit', 'Trap', 'Boom Bap', 'Drill', 'Grime', 'Speed Flow'].map((st) => (
                       <button
                         type="button"
                         key={st}
                         onClick={() => setSelectedStyle(st)}
                         className={`rounded-lg py-2 px-2 text-[11px] font-bold border transition-all ${
                           selectedStyle === st
-                            ? 'bg-amber-500 text-neutral-950 border-amber-500 shadow'
+                            ? 'bg-amber-500 text-neutral-950 border-amber-500 shadow font-black'
                             : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
                         }`}
                       >
-                        {st}
+                        {st === 'Detroit' ? '🎹 Detroit' : st === 'Trap' ? '🔥 Trap' : st === 'Boom Bap' ? '🎙️ Boombap' : st}
                       </button>
                     ))}
                   </div>
                 </div>
 
+                {/* Habilidades Técnicas */}
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                    Nível de Experiência no Freestyle:
+                    ⚡ Foco Técnico (Speedflow, Punchline, Flow, etc):
                   </label>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {[
-                      { id: 'iniciante', label: 'Iniciante', icon: '🌱' },
-                      { id: 'intermediario', label: 'Médio', icon: '🔥' },
-                      { id: 'batalhador', label: 'Pro MC', icon: '👑' },
-                    ].map((lvl) => (
-                      <button
-                        type="button"
-                        key={lvl.id}
-                        onClick={() => setExperienceLevel(lvl.id as any)}
-                        className={`flex flex-col items-center justify-center p-2 rounded-lg text-xs font-bold border transition-all ${
-                          experienceLevel === lvl.id
-                            ? 'bg-orange-500/20 text-orange-300 border-orange-500 shadow'
-                            : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <span className="text-sm mb-0.5">{lvl.icon}</span>
-                        <span>{lvl.label}</span>
-                      </button>
-                    ))}
+                      { id: 'speedflow' as SkillFocusType, label: '⚡ Speedflow' },
+                      { id: 'punchline' as SkillFocusType, label: '🥊 Punchline' },
+                      { id: 'encaixe_beat' as SkillFocusType, label: '🎯 Encaixar no Beat' },
+                      { id: 'flow' as SkillFocusType, label: '🌊 Variação de Flow' },
+                      { id: 'contagem_versos' as SkillFocusType, label: '📐 Contagem de Versos' },
+                    ].map((skill) => {
+                      const isChecked = focusSkills.includes(skill.id);
+                      return (
+                        <button
+                          key={skill.id}
+                          type="button"
+                          onClick={() => {
+                            if (isChecked) {
+                              setFocusSkills(focusSkills.filter(s => s !== skill.id));
+                            } else {
+                              setFocusSkills([...focusSkills, skill.id]);
+                            }
+                          }}
+                          className={`flex items-center justify-between p-1.5 rounded-lg border text-[11px] font-bold transition-all ${
+                            isChecked
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/60'
+                              : 'bg-neutral-950 text-neutral-400 border-neutral-800'
+                          }`}
+                        >
+                          <span>{skill.label}</span>
+                          {isChecked && <span className="text-[10px] text-amber-400">✓</span>}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
