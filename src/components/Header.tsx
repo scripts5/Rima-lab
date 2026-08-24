@@ -24,8 +24,8 @@ import {
 import { UserProfile, Subscription, LiveCallSession } from '../types';
 
 interface HeaderProps {
-  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding';
-  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding') => void;
+  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls';
+  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls') => void;
   profile: UserProfile | null;
   subscription: Subscription | null;
   liveCall: LiveCallSession | null;
@@ -152,6 +152,25 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Headphones className="h-3.5 w-3.5 text-[#5865F2] group-hover:text-white" />
             <span>Bot / Beats 🎧</span>
+          </button>
+
+          <button
+            id="nav-calls-btn"
+            onClick={() => setActiveTab('calls')}
+            className={`relative flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeTab === 'calls'
+                ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-600/30'
+                : liveCall?.isActive
+                ? 'bg-red-950/60 border border-red-500/50 text-red-300 hover:bg-red-900/50'
+                : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
+            }`}
+            title="Sala de Calls & Aulas ao Vivo com Kowalski & Luquita"
+          >
+            <Video className={`h-3.5 w-3.5 ${liveCall?.isActive ? 'text-red-400 animate-pulse' : 'text-neutral-400'}`} />
+            <span>Calls / Aulas</span>
+            {liveCall?.isActive && (
+              <span className="flex h-2 w-2 rounded-full bg-red-500 animate-ping" />
+            )}
           </button>
 
           <button
@@ -336,7 +355,19 @@ export const Header: React.FC<HeaderProps> = ({
             activeTab === 'bot' ? 'bg-[#5865F2] text-white font-bold' : 'text-neutral-400'
           }`}
         >
-          Bot / Beats 🎧
+          Bot 🎧
+        </button>
+        <button
+          onClick={() => setActiveTab('calls')}
+          className={`flex-1 py-1 px-2 text-center rounded text-xs font-bold whitespace-nowrap transition-all ${
+            activeTab === 'calls'
+              ? 'bg-red-600 text-white font-black'
+              : liveCall?.isActive
+              ? 'bg-red-950/80 border border-red-500/50 text-red-300 animate-pulse'
+              : 'text-neutral-400'
+          }`}
+        >
+          {liveCall?.isActive ? '🔴 Calls Ao Vivo' : '📹 Calls'}
         </button>
         <button
           onClick={() => setActiveTab('lessons')}

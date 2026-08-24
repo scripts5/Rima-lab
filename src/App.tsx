@@ -24,6 +24,9 @@ import {
   DiscordBeatBot 
 } from './components/DiscordBeatBot';
 import { 
+  LiveCallRoom 
+} from './components/LiveCallRoom';
+import { 
   OnboardingLanding 
 } from './components/OnboardingLanding';
 import { 
@@ -58,7 +61,7 @@ import { ACHIEVEMENTS_DATA } from './data/achievements';
 import confetti from 'canvas-confetti';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard'>('onboarding');
+  const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'calls' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard'>('onboarding');
   
   // Data States
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -418,6 +421,28 @@ export function App() {
           />
         )}
 
+        {activeTab === 'calls' && (
+          <LiveCallRoom
+            liveCall={liveCall}
+            profile={profile}
+            subscription={subscription}
+            onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenSubscription={() => setIsSubscriptionOpen(true)}
+            onOpenStudio={() => setActiveTab('studio')}
+            isPlayingBeat={isPlayingBeat}
+            onToggleBeat={() => {
+              const playing = globalBeatEngine.togglePlay();
+              setIsPlayingBeat(playing);
+            }}
+            currentBeat={currentBeat}
+            onSelectBeat={(selectedBeat) => {
+              setCurrentBeat(selectedBeat);
+              globalBeatEngine.setBeat(selectedBeat);
+            }}
+            onShowToast={showToast}
+          />
+        )}
+
         {activeTab === 'lessons' && (
           <RhymeLabAcademy
             lessons={lessons}
@@ -484,6 +509,7 @@ export function App() {
         currentLiveCall={liveCall}
         onUpdateLiveCall={handleUpdateLiveCall}
         onShowToast={showToast}
+        onNavigateToCalls={() => setActiveTab('calls')}
       />
 
       <GmailAuthModal

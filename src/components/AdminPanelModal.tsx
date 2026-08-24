@@ -24,6 +24,7 @@ interface AdminPanelModalProps {
   currentLiveCall: LiveCallSession | null;
   onUpdateLiveCall: (callData: Partial<LiveCallSession>) => Promise<boolean>;
   onShowToast: (title: string, message: string, type?: 'success' | 'error' | 'info' | 'xp') => void;
+  onNavigateToCalls?: () => void;
 }
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
@@ -32,6 +33,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   currentLiveCall,
   onUpdateLiveCall,
   onShowToast,
+  onNavigateToCalls,
 }) => {
   const [passwordInput, setPasswordInput] = useState('36737829');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -543,27 +545,58 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
 
                   {/* Actions */}
-                  <div className="flex flex-wrap items-center gap-3 pt-2">
-                    <button
-                      id="broadcast-live-btn"
-                      onClick={() => handleBroadcastCall(true)}
-                      disabled={isLoading || !callUrl}
-                      className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-500 py-3 text-xs font-black text-white shadow-xl shadow-red-500/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
-                    >
-                      <Radio className="h-4 w-4" />
-                      <span>Transmitir Chamada Agora para Todos os Alunos</span>
-                    </button>
-
-                    {isActive && (
+                  <div className="space-y-2 pt-2">
+                    <div className="flex flex-wrap items-center gap-3">
                       <button
-                        id="stop-live-btn"
-                        onClick={() => handleBroadcastCall(false)}
-                        disabled={isLoading}
-                        className="px-4 py-3 rounded-xl border border-neutral-700 bg-neutral-900 text-xs font-bold text-neutral-300 hover:bg-neutral-800 hover:text-white"
+                        id="broadcast-live-btn"
+                        onClick={() => handleBroadcastCall(true)}
+                        disabled={isLoading || !callUrl}
+                        className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-500 py-3 text-xs font-black text-white shadow-xl shadow-red-500/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
                       >
-                        Encerrar Transmissão
+                        <Radio className="h-4 w-4" />
+                        <span>Transmitir Chamada Agora para Todos os Alunos</span>
                       </button>
-                    )}
+
+                      {isActive && (
+                        <button
+                          id="stop-live-btn"
+                          onClick={() => handleBroadcastCall(false)}
+                          disabled={isLoading}
+                          className="px-4 py-3 rounded-xl border border-neutral-700 bg-neutral-900 text-xs font-bold text-neutral-300 hover:bg-neutral-800 hover:text-white"
+                        >
+                          Encerrar Transmissão
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Quick Access / Test Live Call */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      {onNavigateToCalls && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onNavigateToCalls();
+                          }}
+                          className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-all"
+                        >
+                          <Video className="h-3.5 w-3.5 text-amber-400" />
+                          <span>👁️ Abrir Sala de Calls no Site</span>
+                        </button>
+                      )}
+
+                      {callUrl && (
+                        <a
+                          href={callUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center gap-2 rounded-xl border border-neutral-700 bg-neutral-800/80 py-2 text-xs font-bold text-neutral-200 hover:text-white hover:bg-neutral-700 transition-all"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5 text-neutral-400" />
+                          <span>Testar Link Externo ({platform})</span>
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
