@@ -61,6 +61,8 @@ export interface UserProfile {
   totalMinutesPracticed: number;
   bestScore: number;
   totalWordsRhymed: number;
+  email?: string;
+  role?: 'USER' | 'ADMIN';
   levelDetails?: LevelDetails;
 }
 
@@ -154,10 +156,19 @@ export interface PracticeSession {
   createdAt: string;
 }
 
+export interface InteractiveDrillConfig {
+  type: 'speed_metronome' | 'punchline_finish' | 'rhyme_fill' | 'voice_repeat';
+  targetBpm?: number;
+  setupVerses?: string[];
+  expectedRhymeSuffix?: string;
+  drillDescription: string;
+  drillHint: string;
+}
+
 export interface Lesson {
   id: string;
   title: string;
-  category: 'Fundamentos' | 'Métrica & Flow' | 'Punchlines' | 'Batalhas & Improviso' | 'Vocabulário';
+  category: 'Fundamentos' | 'Métrica & Flow' | 'Punchlines' | 'Batalhas & Improviso' | 'Vocabulário' | 'Speed Flow' | 'Encaixe no Beat' | 'Contagem de Versos' | 'Gastação' | 'Ideológica';
   difficulty: 'Iniciante' | 'Intermediário' | 'Avançado';
   xpReward: number;
   durationMinutes: number;
@@ -169,6 +180,15 @@ export interface Lesson {
   exercisePrompt: string;
   exerciseWords: string[];
   isCompleted?: boolean;
+  targetSkill?: SkillFocusType | 'gastacao' | 'ideologica' | 'geral';
+  targetAge?: ('kids' | 'jovem' | 'adulto' | 'todas')[];
+  targetObjective?: ('batalha' | 'composicao' | 'velocidade' | 'flow' | 'geral')[];
+  recommendedBeatStyle?: string[];
+  track?: 'speedflow' | 'punchline' | 'fundamentos' | 'geral';
+  tier?: 1 | 2 | 3 | 4; // 1: Básico, 2: Intermediário, 3: Avançado, 4: Mestre
+  prerequisiteLessonId?: string;
+  aiVoiceScript?: string;
+  interactiveDrill?: InteractiveDrillConfig;
 }
 
 export interface Challenge {

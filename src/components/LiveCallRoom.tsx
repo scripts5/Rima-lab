@@ -16,7 +16,8 @@ import {
   Play, 
   Square,
   MessageSquare,
-  Award
+  Award,
+  RefreshCw
 } from 'lucide-react';
 import { LiveCallSession, UserProfile, Subscription, Beat } from '../types';
 import { PRESET_BEATS, globalBeatEngine } from '../lib/audio/beatEngine';
@@ -28,6 +29,7 @@ interface LiveCallRoomProps {
   onOpenAdmin: () => void;
   onOpenSubscription: () => void;
   onOpenStudio: () => void;
+  onOpenVoiceCoach?: () => void;
   isPlayingBeat: boolean;
   onToggleBeat: () => void;
   currentBeat: Beat;
@@ -42,6 +44,7 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
   onOpenAdmin,
   onOpenSubscription,
   onOpenStudio,
+  onOpenVoiceCoach,
   isPlayingBeat,
   onToggleBeat,
   currentBeat,
@@ -139,6 +142,17 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {onOpenVoiceCoach && (
+            <button
+              id="call-room-voice-coach-btn"
+              onClick={onOpenVoiceCoach}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-xs font-black text-neutral-950 hover:from-amber-400 hover:to-orange-400 transition-all shadow-md shadow-amber-500/20 hover:scale-105"
+            >
+              <Mic className="h-4 w-4 animate-pulse" />
+              <span>🎙️ Treinar com Professor IA (Voz)</span>
+            </button>
+          )}
+
           <button
             id="call-room-admin-btn"
             onClick={onOpenAdmin}
@@ -159,6 +173,39 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
         </div>
       </div>
 
+      {/* AI Voice Professor 24/7 Spotlight */}
+      {onOpenVoiceCoach && (
+        <div className="relative overflow-hidden rounded-3xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-neutral-900 to-orange-950/40 p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500 text-neutral-950 font-black text-2xl shadow-lg shadow-amber-500/30 shrink-0">
+              <Mic className="h-6 w-6 text-neutral-950 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-extrabold text-white">
+                  Treinador Vocal IA Disponível 24/7
+                </h3>
+                <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold text-amber-300">
+                  Gemini Live Audio
+                </span>
+              </div>
+              <p className="text-xs text-neutral-300 mt-0.5">
+                Converse por voz com o Professor Rima IA para receber correções de métrica, exercícios de speed flow e trocas de rimas no microfone.
+              </p>
+            </div>
+          </div>
+
+          <button
+            id="spotlight-voice-coach-btn"
+            onClick={onOpenVoiceCoach}
+            className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all hover:scale-105 shrink-0 flex items-center justify-center gap-2"
+          >
+            <Sparkles className="h-4 w-4 text-neutral-950" />
+            <span>Abrir Conversa de Voz com IA</span>
+          </button>
+        </div>
+      )}
+
       {/* Main Broadcast Stage */}
       {isCallActive ? (
         <div className="relative overflow-hidden rounded-3xl border border-red-500/40 bg-gradient-to-b from-neutral-900 via-neutral-950 to-neutral-950 p-6 sm:p-10 shadow-2xl shadow-red-950/20">
@@ -176,6 +223,10 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
                 </span>
                 <span className={`rounded-full border px-3 py-1 text-xs font-bold ${platformInfo.badgeBg}`}>
                   {platformInfo.icon} {platformInfo.name}
+                </span>
+                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/40 px-2.5 py-1 text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Sincronizado em Tempo Real (0ms)</span>
                 </span>
               </div>
 

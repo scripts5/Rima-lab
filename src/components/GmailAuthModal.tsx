@@ -14,6 +14,7 @@ import {
   Lock
 } from 'lucide-react';
 import { UserProfile, Subscription, TrialStatus } from '../types';
+import { saveUserProfileToFirestore } from '../lib/firestoreService';
 
 interface GmailAuthModalProps {
   isOpen: boolean;
@@ -71,6 +72,9 @@ export const GmailAuthModal: React.FC<GmailAuthModalProps> = ({
       const data = await res.json();
 
       if (res.ok && data.user) {
+        if (data.profile) {
+          saveUserProfileToFirestore(data.profile).catch(e => console.warn('Firestore profile sync error on login:', e));
+        }
         onLoginSuccess(data.user, data.profile, data.subscription, data.trialStatus);
         onShowToast(
           '🎉 Acesso Liberado com 14 Dias Grátis!',

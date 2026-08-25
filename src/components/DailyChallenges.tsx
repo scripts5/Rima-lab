@@ -11,17 +11,33 @@ import {
   Check,
   Target
 } from 'lucide-react';
-import { Challenge } from '../types';
+import { Challenge, UserProfile } from '../types';
 
 interface DailyChallengesProps {
   challenges: Challenge[];
+  profile?: UserProfile | null;
   onStartChallengeInStudio: (challenge: Challenge) => void;
 }
 
 export const DailyChallenges: React.FC<DailyChallengesProps> = ({
   challenges,
+  profile,
   onStartChallengeInStudio,
 }) => {
+  const [filterCategory, setFilterCategory] = React.useState<string>('Minha Trilha');
+
+  const userSkills = profile?.focusSkills || ['speedflow', 'encaixe_beat', 'contagem_versos'];
+
+  const filteredChallenges = challenges.filter(c => {
+    if (filterCategory === 'Todos') return true;
+    if (filterCategory === 'Minha Trilha') {
+      if (userSkills.includes('speedflow') && c.category === 'Speed') return true;
+      if (userSkills.includes('punchline') && c.category === 'Punchline') return true;
+      if (userSkills.includes('flow') && c.category === 'Daily') return true;
+      return c.category === 'Daily' || c.category === 'Speed' || c.category === 'Punchline';
+    }
+    return c.category === filterCategory;
+  });
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
       
@@ -53,11 +69,37 @@ export const DailyChallenges: React.FC<DailyChallengesProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Categories */}
+        <div className="flex flex-wrap gap-2 mt-6 pt-4 border-t border-neutral-800">
+          {['Minha Trilha', 'Todos', 'Speed', 'Punchline', 'Daily', 'Vocabulary', 'Storytelling'].map((cat) => {
+            const isTrilha = cat === 'Minha Trilha';
+            const isSelected = filterCategory === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setFilterCategory(cat)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  isSelected
+                    ? isTrilha
+                      ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-neutral-950 font-black shadow-md'
+                      : 'bg-amber-500 text-neutral-950 shadow-md'
+                    : isTrilha
+                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                    : 'bg-neutral-900 text-neutral-400 border border-neutral-800 hover:text-white'
+                }`}
+              >
+                {isTrilha && <Sparkles className="h-3 w-3" />}
+                <span>{cat}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Challenges Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {challenges.map((challenge) => {
+        {filteredChallenges.map((challenge) => {
           const isDone = challenge.completed;
           return (
             <div

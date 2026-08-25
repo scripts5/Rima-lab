@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User record and auth information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user ID" },
+        "email": { "type": "string", "format": "email", "description": "User email address" },
+        "role": { "type": "string", "enum": ["USER", "ADMIN"], "description": "Role in platform" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation time" }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "MC profile, rank, level, and stats",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Profile ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "artisticName": { "type": "string", "description": "MC artistic name" },
+        "tagline": { "type": "string", "description": "Tagline or slogan" },
+        "bio": { "type": "string", "description": "Bio description" },
+        "favoriteStyle": { "type": "string", "description": "Preferred rap style" },
+        "level": { "type": "number", "description": "Current MC level" },
+        "totalXP": { "type": "number", "description": "Total XP accumulated" },
+        "streakDays": { "type": "number", "description": "Consecutive days practiced" },
+        "lastPracticeDate": { "type": "string", "description": "Last practice timestamp" },
+        "avatarUrl": { "type": "string", "description": "Avatar URL" },
+        "isPublic": { "type": "boolean", "description": "Public profile visibility" },
+        "totalSessions": { "type": "number", "description": "Total practice sessions" },
+        "bestScore": { "type": "number", "description": "Highest score achieved" },
+        "totalWordsRhymed": { "type": "number", "description": "Total words rhymed" }
+      },
+      "required": ["id", "userId", "artisticName", "level", "totalXP"]
+    },
+    "UserLessonProgress": {
+      "title": "UserLessonProgress",
+      "description": "User completed lesson record and track unlocks",
+      "type": "object",
+      "properties": {
+        "lessonId": { "type": "string", "description": "ID of completed lesson" },
+        "userId": { "type": "string", "description": "User who completed" },
+        "track": { "type": "string", "description": "Track e.g. speedflow, punchline" },
+        "tier": { "type": "number", "description": "Track tier level (1: Iniciante, 2: Intermediário, 3: Avançado, 4: Mestre)" },
+        "completedAt": { "type": "string", "format": "date-time", "description": "Timestamp of completion" },
+        "userLyrics": { "type": "string", "description": "Lyrics submitted in practical exercise" },
+        "score": { "type": "number", "description": "Score awarded" }
+      },
+      "required": ["lessonId", "userId", "completedAt"]
+    },
+    "PracticeSession": {
+      "title": "PracticeSession",
+      "description": "Freestyle practice recording with deterministic & AI analysis",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Session ID" },
+        "userId": { "type": "string", "description": "User ID" },
+        "beatId": { "type": "string", "description": "Beat ID used" },
+        "beatStyle": { "type": "string", "description": "Beat style" },
+        "bpm": { "type": "number", "description": "BPM of beat" },
+        "durationSeconds": { "type": "number", "description": "Duration in seconds" },
+        "transcript": { "type": "string", "description": "Transcribed rhyme text" },
+        "xpEarned": { "type": "number", "description": "XP earned" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Date created" }
+      },
+      "required": ["id", "userId", "transcript", "xpEarned", "createdAt"]
+    },
+    "CommunitySuggestion": {
+      "title": "CommunitySuggestion",
+      "description": "Community feature and beat requests with upvoting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Suggestion ID" },
+        "authorName": { "type": "string", "description": "Name of author" },
+        "category": { "type": "string", "description": "Category" },
+        "title": { "type": "string", "description": "Suggestion title" },
+        "description": { "type": "string", "description": "Suggestion details" },
+        "upvotes": { "type": "number", "description": "Vote count" },
+        "tags": { "type": "array", "description": "Tag list" },
+        "status": { "type": "string", "description": "Status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Date created" },
+        "teacherComment": { "type": "string", "description": "Teacher feedback" }
+      },
+      "required": ["id", "authorName", "category", "title", "description", "upvotes"]
+    },
+    "LiveCallSession": {
+      "title": "LiveCallSession",
+      "description": "Live teacher class broadcast",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Call ID" },
+        "isActive": { "type": "boolean", "description": "Is live broadcast active" },
+        "platform": { "type": "string", "description": "Platform e.g. discord, whatsapp, meet" },
+        "url": { "type": "string", "description": "Join link" },
+        "title": { "type": "string", "description": "Call title" },
+        "description": { "type": "string", "description": "Call description" },
+        "hostName": { "type": "string", "description": "Teacher / host name" },
+        "startedAt": { "type": "string", "description": "Start timestamp" }
+      },
+      "required": ["id", "isActive", "platform", "url", "title"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "#/entities/User",
+      "description": "User account info"
+    },
+    "/users/{userId}/profile/{profileId}": {
+      "schema": "#/entities/UserProfile",
+      "description": "User profile metrics and level"
+    },
+    "/users/{userId}/lessons/{lessonId}": {
+      "schema": "#/entities/UserLessonProgress",
+      "description": "User completed lesson progress"
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": "#/entities/PracticeSession",
+      "description": "User freestyle history"
+    },
+    "/suggestions/{suggestionId}": {
+      "schema": "#/entities/CommunitySuggestion",
+      "description": "Community feature requests and votes"
+    },
+    "/live_calls/{callId}": {
+      "schema": "#/entities/LiveCallSession",
+      "description": "Live broadcasts and calls from teachers"
+    }
+  }
+}

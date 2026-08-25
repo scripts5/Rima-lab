@@ -1,7 +1,10 @@
 import express from 'express';
+import http from 'http';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, Modality } from '@google/genai';
+import type { LiveServerMessage } from '@google/genai';
+import { WebSocketServer, WebSocket } from 'ws';
 import { analyzeRhymesDeterministically } from './src/lib/rhymes/rhymeAnalyzer';
 import { LESSONS_DATA } from './src/data/lessons';
 import { CHALLENGES_DATA } from './src/data/challenges';
@@ -118,6 +121,25 @@ let currentLiveCall: LiveCallState = {
   startedAt: new Date().toISOString(),
   targetTier: 'ALL',
 };
+
+// Real-Time SSE Subscribers for Live Call Broadcasts
+const liveCallSubscribers = new Set<express.Response>();
+
+function broadcastLiveCallUpdate() {
+  const payload = JSON.stringify({
+    type: 'live-call-update',
+    liveCall: currentLiveCall,
+    timestamp: Date.now(),
+  });
+  
+  for (const client of Array.from(liveCallSubscribers)) {
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch (err) {
+      liveCallSubscribers.delete(client);
+    }
+  }
+}
 
 // Client IP extractor helper
 function getClientIp(req: express.Request): string {
@@ -451,39 +473,96 @@ async function startServer() {
     });
   });
 
-  // --- Live Call System (Students / Public) ---
+  // --- Live Call System (Students / Public & Real-Time SSE Broadcast) ---
   app.get('/api/live-call', (req, res) => {
-    res.json({ liveCall: currentLiveCall });
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.json({ liveCall: currentLiveCall, timestamp: Date.now() });
+  });
+
+  // Server-Sent Events (SSE) for Real-Time Instant Live Call Sync
+  app.get('/api/live-call/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    
+    // Flush initial state immediately to new client
+    res.write(`data: ${JSON.stringify({ type: 'live-call-init', liveCall: currentLiveCall, timestamp: Date.now() })}\n\n`);
+    
+    liveCallSubscribers.add(res);
+
+    // Heartbeat ping every 10 seconds to keep streaming connection healthy
+    const pingInterval = setInterval(() => {
+      try {
+        res.write(`data: ${JSON.stringify({ type: 'ping', timestamp: Date.now() })}\n\n`);
+      } catch {
+        clearInterval(pingInterval);
+        liveCallSubscribers.delete(res);
+      }
+    }, 10000);
+
+    req.on('close', () => {
+      clearInterval(pingInterval);
+      liveCallSubscribers.delete(res);
+    });
   });
 
   // --- Admin Endpoints (Password Protected: 36737829) ---
-  app.post('/api/admin/login', (req, res) => {
-    const { password } = req.body || {};
-    const cleanPwd = String(password || '').trim();
-    if (cleanPwd === '36737829' || cleanPwd === 'admin') {
+  app.post(['/api/admin/login', '/api/admin/verify-security', '/api/admin/verify'], (req, res) => {
+    const { password, adminToken } = req.body || {};
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'];
+    const tokenHeader = req.headers['x-admin-token'];
+
+    const cleanPwd = String(password || pwdHeader || '').trim();
+    const cleanToken = String(adminToken || tokenHeader || (authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '')).trim();
+
+    const isPasswordValid = cleanPwd === '36737829' || cleanPwd === 'admin';
+    const isTokenValid = cleanToken === 'adm_token_36737829';
+
+    if (isPasswordValid || isTokenValid) {
       res.json({
         success: true,
+        authorized: true,
         adminToken: 'adm_token_36737829',
         adminName: 'Professores (Kowalski MC & Luquita MC)',
         role: 'ADMIN',
-        message: 'Acesso Mestre Concedido! Bem-vindo ao painel de administração.',
+        permissions: ['EDIT_CALL_LINK', 'BROADCAST_LIVE', 'VIEW_METRICS', 'MANAGE_TRIALS'],
+        message: 'Acesso Mestre Concedido e Verificado! Bem-vindo ao painel de administração.',
       });
     } else {
-      res.status(401).json({ success: false, error: 'Senha de administrador incorreta. Acesso negado.' });
+      res.status(401).json({ 
+        success: false, 
+        authorized: false,
+        error: 'Verificação de segurança falhou. Senha ou credencial de administrador inválida.' 
+      });
     }
   });
 
   // Admin: Broadcast / Update Live Call Link (WhatsApp / Discord / Google Meet)
   app.post('/api/admin/live-call', (req, res) => {
     const { password, adminToken, platform, url, title, description, hostName, isActive, targetTier } = req.body || {};
-    const cleanPwd = String(password || '').trim();
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'];
+    const tokenHeader = req.headers['x-admin-token'];
+
+    const cleanPwd = String(password || pwdHeader || '').trim();
+    const cleanToken = String(adminToken || tokenHeader || (authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '')).trim();
     
-    // Verify password or admin token
-    if (cleanPwd !== '36737829' && adminToken !== 'adm_token_36737829') {
-      return res.status(401).json({ error: 'Não autorizado. Senha de admin inválida.' });
+    // Backend Security Verification
+    const isAuthorized = cleanPwd === '36737829' || cleanPwd === 'admin' || cleanToken === 'adm_token_36737829';
+    if (!isAuthorized) {
+      return res.status(401).json({ 
+        success: false,
+        authorized: false,
+        error: 'Verificação de segurança rejeitada pelo servidor. Acesso não autorizado para editar ou transmitir links de chamada.' 
+      });
     }
 
-    if (url) currentLiveCall.url = url.trim();
+    if (url) {
+      const rawUrl = String(url).trim();
+      currentLiveCall.url = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+    }
     if (platform) currentLiveCall.platform = platform;
     if (title) currentLiveCall.title = title.trim();
     if (description !== undefined) currentLiveCall.description = description.trim();
@@ -492,10 +571,18 @@ async function startServer() {
     if (targetTier) currentLiveCall.targetTier = targetTier;
     currentLiveCall.startedAt = new Date().toISOString();
 
+    // Instant real-time broadcast to all connected student clients
+    broadcastLiveCallUpdate();
+
     res.json({
       success: true,
-      message: currentLiveCall.isActive ? 'Chamada ao vivo transmitida para todos os alunos!' : 'Transmissão ao vivo encerrada.',
+      authorized: true,
+      securityVerified: true,
+      message: currentLiveCall.isActive 
+        ? '🔴 Chamada ao vivo verificada pelo backend e transmitida em tempo real para todos os alunos!' 
+        : 'Transmissão ao vivo encerrada com sucesso.',
       liveCall: currentLiveCall,
+      subscribersCount: liveCallSubscribers.size,
     });
   });
 
@@ -1367,14 +1454,15 @@ Analise este título/link e retorne um JSON com:
   });
 
   // Lessons: Complete
-  app.post('/api/lessons/complete', (req, res) => {
+  app.post(['/api/lessons/complete', '/api/lessons/:lessonId/complete'], (req, res) => {
     const authHeader = req.headers.authorization;
     let userId = seedUserId;
     if (authHeader && authHeader.startsWith('Bearer jwt_token_')) {
       userId = authHeader.replace('Bearer jwt_token_', '');
     }
 
-    const { lessonId } = req.body;
+    const lessonId = req.params.lessonId || req.body.lessonId;
+    const { lyrics, customLyrics } = req.body;
     const lesson = LESSONS_DATA.find(l => l.id === lessonId);
     if (!lesson) return res.status(404).json({ error: 'Lição não encontrada.' });
 
@@ -1421,6 +1509,7 @@ Analise este título/link e retorne um JSON com:
     const levelDetails = calculateLevelDetails(profile.totalXP);
     res.json({
       success: true,
+      lessonId,
       xpEarned: isFirstTime ? lesson.xpReward : 0,
       profile: { ...profile, levelDetails },
     });
@@ -1656,6 +1745,45 @@ Analise este título/link e retorne um JSON com:
     res.json({ success: true, message: 'Seu histórico e estatísticas foram resetados com sucesso conforme LGPD.' });
   });
 
+  // --- Voice Coach / Professor Rima IA Text & Feedback API ---
+  app.post('/api/voice-coach/ask', async (req, res) => {
+    try {
+      const { prompt, topic, userStyle, artisticName } = req.body;
+      const ai = getGeminiClient();
+
+      if (!ai) {
+        return res.json({
+          reply: `Salve, ${artisticName || 'MC'}! Professor Rima na área. Para mandar bem no ${userStyle || 'Boom Bap'}, lembre-se: respire sempre na virada do terceiro pro quarto compasso e solte a punchline com firmeza no tempo da caixa!`,
+        });
+      }
+
+      const systemPrompt = `Você é o Professor Rima, o mentor e mestre de freestyle e rap nacional do RimaLab Academy (criado por Luquita MC e Kowalski MC).
+Você fala diretamente com o MC ${artisticName || 'aluno'}, que rima no estilo ${userStyle || 'Boom Bap'}.
+Seu papel:
+- Ensinar técnicas avançadas de freestyle, métrica (compasso 4/4), respiração, rimas ricas e multisilábicas, speed flow e punchlines.
+- Responda de forma dinâmica, empolgante, com gírias respeitosas do hip-hop brasileiro (ex: "Salve, meu parceiro!", "Visão!", "Manda brasa!", "Se liga no compasso!").
+- Se o aluno mandar uma rima, analise a métrica e a força da punchline, e dê um exemplo rimado melhorando ou continuando o flow.
+- Mantenha a resposta concisa, pronta para ser ouvida ou lida com ritmo de rap.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.7-flash',
+        contents: prompt || 'Dê uma dica rápida de como melhorar meu flow hoje.',
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.8,
+        },
+      });
+
+      const reply = response.text || 'Mantenha o treino constante! Cada rima no beat te aproxima do nível lendário!';
+      res.json({ reply });
+    } catch (error: any) {
+      console.warn('Voice coach error:', error);
+      res.json({
+        reply: 'Visão, MC! Pratique a respiração ritmada com o metrônomo: solte a primeira rima no compasso 2 e feche a ideia no compasso 4 com uma palavra forte!',
+      });
+    }
+  });
+
   // --- Vite Middleware / Static Serving ---
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -1671,7 +1799,122 @@ Analise este título/link e retorne um JSON com:
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  // --- HTTP & WebSocket Live Server Setup ---
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ server, path: '/live-coach' });
+
+  wss.on('connection', async (clientWs: WebSocket) => {
+    console.log('[Live Coach WS] Client connected to Professor Rima');
+    let session: any = null;
+
+    try {
+      const ai = getGeminiClient();
+      if (!ai) {
+        clientWs.send(JSON.stringify({ type: 'error', error: 'Chave GEMINI_API_KEY não configurada no servidor.' }));
+        clientWs.close();
+        return;
+      }
+
+      session = await ai.live.connect({
+        model: 'gemini-3.1-flash-live-preview',
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+          },
+          systemInstruction: `Você é o Professor Rima, o lendário mestre e treinador de rap e freestyle do RimaLab Academy.
+Você foi fundado e treinado pelos mestres do hip-hop Luquita MC e Kowalski MC.
+Sua missão:
+1. Ensinar métrica, compasso 4/4, respiração, dicção, speed flow, rimas ricas, punchlines e improviso em tempo real.
+2. Falar SEMPRE em português do Brasil (pt-BR) com tom encorajador, gírias autênticas do rap nacional e ritmo contagiante.
+3. Se o aluno falar ou rimar no microfone, ouça atentamente, comente sobre o flow, pontue o encaixe e proponha rimas e desafios imediatos.
+4. Mantenha respostas enxutas e conversacionais, adequadas para áudio em tempo real.`,
+          outputAudioTranscription: {},
+          inputAudioTranscription: {},
+        },
+        callbacks: {
+          onmessage: (message: LiveServerMessage) => {
+            try {
+              const audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+              const text = message.serverContent?.modelTurn?.parts?.[0]?.text;
+
+              if (audio) {
+                clientWs.send(JSON.stringify({ type: 'audio', audio }));
+              }
+              if (text) {
+                clientWs.send(JSON.stringify({ type: 'text', text }));
+              }
+              if (message.serverContent?.interrupted) {
+                clientWs.send(JSON.stringify({ type: 'interrupted', interrupted: true }));
+              }
+              if (message.serverContent?.turnComplete) {
+                clientWs.send(JSON.stringify({ type: 'turnComplete' }));
+              }
+            } catch (e) {
+              console.warn('[Live Coach] Error in message callback:', e);
+            }
+          },
+          onclose: () => {
+            console.log('[Live Coach] Gemini session ended');
+            try {
+              clientWs.send(JSON.stringify({ type: 'session_closed' }));
+            } catch {}
+          },
+          onerror: (err: any) => {
+            console.warn('[Live Coach] Live session error:', err);
+            try {
+              clientWs.send(JSON.stringify({ type: 'error', error: err?.message || 'Erro na sessão com o Professor IA' }));
+            } catch {}
+          },
+        },
+      });
+
+      clientWs.send(JSON.stringify({ type: 'ready', message: 'Conectado ao Professor Rima IA ao vivo!' }));
+
+      clientWs.on('message', (rawData: any) => {
+        try {
+          const msg = JSON.parse(rawData.toString());
+          if (msg.audio) {
+            session.sendRealtimeInput({
+              audio: { data: msg.audio, mimeType: 'audio/pcm;rate=16000' },
+            });
+          }
+          if (msg.text) {
+            session.sendRealtimeInput({
+              text: msg.text,
+            });
+          }
+        } catch (e) {
+          console.warn('[Live Coach] Error forwarding audio/text to session:', e);
+        }
+      });
+
+      clientWs.on('close', () => {
+        console.log('[Live Coach WS] Client disconnected');
+        try {
+          if (session && typeof session.close === 'function') {
+            session.close();
+          }
+        } catch {}
+      });
+
+      clientWs.on('error', (err) => {
+        console.warn('[Live Coach WS] WebSocket error:', err);
+      });
+
+    } catch (error: any) {
+      console.error('[Live Coach WS] Failed to initiate Gemini Live session:', error);
+      try {
+        clientWs.send(JSON.stringify({ 
+          type: 'error', 
+          error: error?.message || 'Falha ao conectar com o modelo Live da IA.' 
+        }));
+        clientWs.close();
+      } catch {}
+    }
+  });
+
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`RimaLab Server rodando em http://localhost:${PORT}`);
   });
 }

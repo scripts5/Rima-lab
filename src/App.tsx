@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Radio, ExternalLink, Video, X } from 'lucide-react';
 import { 
   Header 
 } from './components/Header';
@@ -23,6 +24,9 @@ import {
 import { 
   SuggestionsTab 
 } from './components/SuggestionsTab';
+import {
+  SkillTracksView
+} from './components/SkillTracksView';
 import { 
   DiscordBeatBot 
 } from './components/DiscordBeatBot';
@@ -45,6 +49,9 @@ import {
   GmailAuthModal 
 } from './components/GmailAuthModal';
 import { 
+  AIVoiceProfessorModal 
+} from './components/AIVoiceProfessorModal';
+import { 
   UserProfile, 
   Subscription, 
   Lesson, 
@@ -55,16 +62,28 @@ import {
   Beat, 
   RhymeAnalysis,
   LiveCallSession,
-  TrialStatus
+  TrialStatus,
+  SkillFocusType,
+  BattleTrainingType
 } from './types';
 import { PRESET_BEATS, globalBeatEngine } from './lib/audio/beatEngine';
 import { LESSONS_DATA } from './data/lessons';
 import { CHALLENGES_DATA } from './data/challenges';
 import { ACHIEVEMENTS_DATA } from './data/achievements';
 import confetti from 'canvas-confetti';
+import { 
+  ensureFirebaseAuth, 
+  saveUserProfileToFirestore, 
+  loadUserProfileFromFirestore, 
+  saveLessonCompletionToFirestore, 
+  loadCompletedLessonsFromFirestore, 
+  savePracticeSessionToFirestore, 
+  subscribeLiveCallFromFirestore 
+} from './lib/firestoreService';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'calls' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'suggestions'>('onboarding');
+  const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'calls' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'suggestions' | 'tracks'>('onboarding');
+  const [initialSkillTab, setInitialSkillTab] = useState<string | undefined>(undefined);
   
   // Data States
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -109,6 +128,14 @@ export function App() {
   const [isPromptGenOpen, setIsPromptGenOpen] = useState<boolean>(false);
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [isGmailAuthOpen, setIsGmailAuthOpen] = useState<boolean>(false);
+  const [isLiveBannerDismissed, setIsLiveBannerDismissed] = useState<boolean>(false);
+
+  // Auto show banner again if URL or active status changes
+  useEffect(() => {
+    if (liveCall?.isActive && liveCall?.url) {
+      setIsLiveBannerDismissed(false);
+    }
+  }, [liveCall?.url, liveCall?.isActive]);
 
   // Toast Notification State
   const [toastMessage, setToastMessage] = useState<{ title: string; desc: string; type: 'xp' | 'ach' | 'info' } | null>(null);
@@ -118,14 +145,61 @@ export function App() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  // Fetch Live Call Broadcast
-  const fetchLiveCall = async () => {
+  // Sound notification chime when Professor sends Live Call link
+  const playLiveCallAlertSound = () => {
     try {
-      const res = await fetch('/api/live-call');
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+
+      // Note 1: D5 (587.33 Hz)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(587.33, now);
+      gain1.gain.setValueAtTime(0.25, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.35);
+
+      // Note 2: A5 (880 Hz) with slight delay
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(880, now + 0.12);
+      gain2.gain.setValueAtTime(0.25, now + 0.12);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.12);
+      osc2.stop(now + 0.55);
+    } catch {
+      // Audio autoplay policy catch
+    }
+  };
+
+  // Fetch Live Call Broadcast (HTTP Fallback)
+  const fetchLiveCall = async (showNotificationOnNew = false) => {
+    try {
+      const res = await fetch('/api/live-call', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (data.liveCall) {
-          setLiveCall(data.liveCall);
+          setLiveCall((prev) => {
+            const hasChanged = !prev || prev.url !== data.liveCall.url || prev.isActive !== data.liveCall.isActive;
+            if (hasChanged && data.liveCall.isActive && showNotificationOnNew) {
+              playLiveCallAlertSound();
+              showToast(
+                '🔴 AULA AO VIVO TRANSMITIDA NO DISCORD!',
+                `${data.liveCall.hostName || 'Os Professores'} atualizaram a sala de chamada. Clique no topo para entrar!`,
+                'ach'
+              );
+            }
+            return data.liveCall;
+          });
           try {
             localStorage.setItem('rimalab_live_call', JSON.stringify(data.liveCall));
           } catch {}
@@ -136,31 +210,139 @@ export function App() {
     }
   };
 
-  // Fetch Dashboard & Profile on Startup
+  // Real-Time SSE Stream for Instant Live Call Broadcast
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+
+    const setupSSE = () => {
+      try {
+        eventSource = new EventSource('/api/live-call/stream');
+        
+        eventSource.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'live-call-update' || payload.type === 'live-call-init') {
+              if (payload.liveCall) {
+                setLiveCall((prev) => {
+                  const isNewUpdate = payload.type === 'live-call-update';
+                  const hasChanged = !prev || prev.url !== payload.liveCall.url || prev.isActive !== payload.liveCall.isActive;
+                  
+                  if (payload.liveCall.isActive && (isNewUpdate || hasChanged)) {
+                    playLiveCallAlertSound();
+                    showToast(
+                      '🔴 AULA AO VIVO NO DISCORD DISPONÍVEL!',
+                      `${payload.liveCall.hostName || 'Os Professores'} enviaram o link da sala. Clique para entrar!`,
+                      'ach'
+                    );
+                  }
+                  return payload.liveCall;
+                });
+                try {
+                  localStorage.setItem('rimalab_live_call', JSON.stringify(payload.liveCall));
+                } catch {}
+              }
+            }
+          } catch (parseErr) {
+            console.warn('SSE Parse error:', parseErr);
+          }
+        };
+
+        eventSource.onerror = () => {
+          // In case of disconnection, close and let fallback polling handle it
+          eventSource?.close();
+          eventSource = null;
+        };
+      } catch (sseErr) {
+        console.warn('SSE not supported, using fast polling fallback:', sseErr);
+      }
+    };
+
+    setupSSE();
+
+    // Fast polling fallback (every 4 seconds + on window focus)
+    const interval = setInterval(() => {
+      fetchLiveCall(true);
+    }, 4000);
+
+    const onFocus = () => fetchLiveCall(true);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchLiveCall(true);
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      if (eventSource) eventSource.close();
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
+
+  // Fetch Dashboard & Profile on Startup with Firestore Persistence
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        // Initialize Firebase Auth session
+        const authUid = await ensureFirebaseAuth();
+
+        // Load Firestore lesson progress
+        const firestoreCompletedLessons = await loadCompletedLessonsFromFirestore(authUid);
+        if (Object.keys(firestoreCompletedLessons).length > 0) {
+          setLessons(prev => prev.map(l => ({
+            ...l,
+            isCompleted: l.isCompleted || Boolean(firestoreCompletedLessons[l.id]),
+          })));
+        }
+
+        // Load Firestore user profile
+        const firestoreProfile = await loadUserProfileFromFirestore(authUid);
+        if (firestoreProfile) {
+          setProfile(firestoreProfile);
+        }
+
         const res = await fetch('/api/dashboard');
         if (res.ok) {
           const data = await res.json();
-          if (data.profile) setProfile(data.profile);
+          if (data.profile) {
+            setProfile(prev => prev ? { ...data.profile, ...prev } : data.profile);
+          }
           if (data.subscription) setSubscription(data.subscription);
           if (data.recentSessions) setPracticeSessions(data.recentSessions);
           if (data.recentTransactions) setXpTransactions(data.recentTransactions);
           if (data.achievements) setAchievements(data.achievements);
-          if (data.lessons) setLessons(data.lessons);
+          if (data.lessons) {
+            setLessons(prev => {
+              const completedSet = new Set(Object.keys(firestoreCompletedLessons));
+              return data.lessons.map((l: Lesson) => ({
+                ...l,
+                isCompleted: l.isCompleted || completedSet.has(l.id),
+              }));
+            });
+          }
           if (data.challenges) setChallenges(data.challenges);
         }
       } catch (err) {
-        console.warn('Using local fallback state:', err);
+        console.warn('Using Firestore/local fallback state:', err);
       }
     };
 
     fetchUserData();
-    fetchLiveCall();
+    fetchLiveCall(false);
 
-    const interval = setInterval(fetchLiveCall, 20000);
-    return () => clearInterval(interval);
+    // Subscribe to Firestore Live Call updates
+    const unsubscribeLiveCall = subscribeLiveCallFromFirestore((firestoreCall) => {
+      if (firestoreCall?.url) {
+        setLiveCall(firestoreCall);
+      }
+    });
+
+    return () => {
+      unsubscribeLiveCall();
+    };
   }, []);
 
   // Handler: Save Freestyle Practice Session
@@ -174,6 +356,21 @@ export function App() {
     xpEarned: number;
   }) => {
     try {
+      // Persist to Firestore
+      const sessionDoc: PracticeSession = {
+        id: `sess_${Date.now()}`,
+        userId: profile?.userId || 'current_user',
+        beatId: sessionData.beatId,
+        beatStyle: sessionData.beatStyle,
+        bpm: sessionData.bpm,
+        durationSeconds: sessionData.durationSeconds,
+        transcript: sessionData.transcript,
+        analysis: sessionData.analysis,
+        xpEarned: sessionData.xpEarned,
+        createdAt: new Date().toISOString(),
+      };
+      savePracticeSessionToFirestore(sessionDoc).catch(e => console.warn('Firestore session save error:', e));
+
       const res = await fetch('/api/practice/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -182,7 +379,10 @@ export function App() {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.profile) setProfile(data.profile);
+        if (data.profile) {
+          setProfile(data.profile);
+          saveUserProfileToFirestore(data.profile).catch(e => console.warn('Firestore profile sync error:', e));
+        }
         if (data.session) {
           setPracticeSessions(prev => [data.session, ...prev]);
         }
@@ -203,13 +403,15 @@ export function App() {
         // Optimistic update
         if (profile) {
           const newXP = profile.totalXP + sessionData.xpEarned;
-          setProfile({
+          const updatedProf = {
             ...profile,
             totalXP: newXP,
             totalSessions: profile.totalSessions + 1,
             totalMinutesPracticed: profile.totalMinutesPracticed + Math.round(sessionData.durationSeconds / 60),
             bestScore: Math.max(profile.bestScore, sessionData.analysis.overallScore),
-          });
+          };
+          setProfile(updatedProf);
+          saveUserProfileToFirestore(updatedProf).catch(e => console.warn('Firestore profile sync error:', e));
         }
         showToast('⚡ Freestyle Registrado!', `Você ganhou +${sessionData.xpEarned} XP!`, 'xp');
       }
@@ -220,6 +422,14 @@ export function App() {
 
   // Handler: Complete Lesson
   const handleCompleteLesson = async (lessonId: string, customLyrics: string): Promise<boolean> => {
+    const lesson = lessons.find(l => l.id === lessonId);
+    const xpReward = lesson?.xpReward || 200;
+
+    // Persist lesson completion directly to Firestore
+    saveLessonCompletionToFirestore(lessonId, customLyrics, xpReward, lesson).catch(e => {
+      console.warn('Firestore lesson completion sync error:', e);
+    });
+
     try {
       const res = await fetch(`/api/lessons/${lessonId}/complete`, {
         method: 'POST',
@@ -229,9 +439,12 @@ export function App() {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.profile) setProfile(data.profile);
+        if (data.profile) {
+          setProfile(data.profile);
+          saveUserProfileToFirestore(data.profile).catch(e => console.warn('Firestore profile sync error:', e));
+        }
         setLessons(prev => prev.map(l => l.id === lessonId ? { ...l, isCompleted: true } : l));
-        showToast('📖 Lição Concluída!', `Parabéns! +${data.xpEarned || 200} XP creditados.`, 'xp');
+        showToast('📖 Lição Concluída!', `Parabéns! +${data.xpEarned || xpReward} XP creditados.`, 'xp');
         return true;
       }
     } catch (e) {
@@ -239,8 +452,12 @@ export function App() {
     }
 
     setLessons(prev => prev.map(l => l.id === lessonId ? { ...l, isCompleted: true } : l));
-    if (profile) setProfile({ ...profile, totalXP: profile.totalXP + 200 });
-    showToast('📖 Lição Concluída!', '+200 XP creditados.', 'xp');
+    if (profile) {
+      const updatedProf = { ...profile, totalXP: profile.totalXP + xpReward };
+      setProfile(updatedProf);
+      saveUserProfileToFirestore(updatedProf).catch(e => console.warn('Firestore profile sync error:', e));
+    }
+    showToast('📖 Lição Concluída!', `+${xpReward} XP creditados.`, 'xp');
     return true;
   };
 
@@ -273,14 +490,21 @@ export function App() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.profile) setProfile(data.profile);
+        if (data.profile) {
+          setProfile(data.profile);
+          saveUserProfileToFirestore(data.profile).catch(e => console.warn('Firestore profile sync error:', e));
+        }
         showToast('✅ Perfil Atualizado', 'Suas informações de MC foram salvas!', 'info');
         return true;
       }
     } catch (err) {
       console.warn('Profile update fallback:', err);
     }
-    if (profile) setProfile({ ...profile, ...updated });
+    if (profile) {
+      const updatedProf = { ...profile, ...updated };
+      setProfile(updatedProf);
+      saveUserProfileToFirestore(updatedProf).catch(e => console.warn('Firestore profile sync error:', e));
+    }
     showToast('✅ Perfil Atualizado', 'Suas informações de MC foram salvas!', 'info');
     return true;
   };
@@ -349,6 +573,21 @@ export function App() {
     });
   };
 
+  // Handler: Update Focus Skills / Trilha Customizada
+  const handleUpdateFocusSkills = (skills: SkillFocusType[], trainingType?: BattleTrainingType) => {
+    if (!profile) return;
+    const updated: UserProfile = {
+      ...profile,
+      focusSkills: skills,
+      ...(trainingType ? { trainingType } : {}),
+    };
+    setProfile(updated);
+    try {
+      localStorage.setItem('rimalab_user_profile', JSON.stringify(updated));
+    } catch {}
+    showToast('🎯 Assuntos Atualizados!', `Sua trilha agora foca em ${skills.length} assuntos selecionados.`, 'xp');
+  };
+
   return (
     <div className="min-h-screen bg-[#0a0a0c] text-neutral-100 font-sans selection:bg-amber-500 selection:text-neutral-950 flex flex-col">
       
@@ -383,6 +622,57 @@ export function App() {
         }}
         currentBeatTitle={currentBeat.title}
       />
+
+      {/* Global Real-Time Live Call Broadcast Banner (When Teacher is Live on Discord / Meet) */}
+      {liveCall?.isActive && liveCall.url && !isLiveBannerDismissed && (
+        <div className="relative z-30 border-b border-red-500/50 bg-gradient-to-r from-red-950/90 via-neutral-900/95 to-red-950/90 px-4 py-2.5 shadow-lg shadow-red-950/30 backdrop-blur-md animate-in slide-in-from-top-2 duration-300">
+          <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3 text-center md:text-left">
+              <span className="flex h-3 w-3 shrink-0 rounded-full bg-red-500 animate-ping" />
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                <span className="rounded-full bg-red-600 px-2.5 py-0.5 text-[10px] font-black uppercase text-white tracking-wider shadow-sm shadow-red-600/50">
+                  🔴 AO VIVO NO DISCORD / CALL
+                </span>
+                <span className="text-xs font-bold text-white">
+                  {liveCall.title || 'Aulas & Mentoria com os Professores'}
+                </span>
+                <span className="hidden sm:inline text-xs text-neutral-400">
+                  • por <strong className="text-amber-400">{liveCall.hostName || 'Kowalski MC & Luquita MC'}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href={/^https?:\/\//i.test(liveCall.url) ? liveCall.url : `https://${liveCall.url}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 px-3.5 py-1.5 text-xs font-black text-white hover:from-red-500 hover:to-amber-500 shadow-md shadow-red-600/40 transition-all hover:scale-105 active:scale-95"
+              >
+                <span>Entrar no Discord Agora</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+
+              <button
+                onClick={() => setActiveTab('calls')}
+                className="flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800/90 px-3 py-1.5 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white transition-colors"
+                title="Abrir Sala de Calls no RimaLab"
+              >
+                <Video className="h-3.5 w-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Sala de Calls</span>
+              </button>
+
+              <button
+                onClick={() => setIsLiveBannerDismissed(true)}
+                className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+                title="Minimizar aviso temporariamente"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main View Router */}
       <main className="flex-1 pb-12">
@@ -470,10 +760,48 @@ export function App() {
           />
         )}
 
+        {activeTab === 'tracks' && (
+          <SkillTracksView
+            profile={profile}
+            initialSelectedTab={initialSkillTab}
+            onUpdateFocusSkills={(skills, trainingType) => {
+              handleUpdateFocusSkills(skills, trainingType);
+            }}
+            onSendToStudioWithSetup={(config) => {
+              if (config.beatStyle) {
+                const match = PRESET_BEATS.find(b => b.style.toLowerCase().includes(config.beatStyle!.toLowerCase())) || PRESET_BEATS[0];
+                setCurrentBeat(match);
+                globalBeatEngine.setBeat(match);
+                if (config.bpm) {
+                  globalBeatEngine.setBpm(config.bpm);
+                }
+              }
+              if (config.prompt) {
+                setActiveChallengeTheme({
+                  title: 'Treino de Trilha Personalizada',
+                  theme: config.prompt,
+                  requiredWords: [],
+                });
+              }
+              if (!isPlayingBeat) {
+                globalBeatEngine.start();
+                setIsPlayingBeat(true);
+              }
+              setActiveTab('studio');
+              showToast('🎙️ Studio Carregado com Sua Trilha!', 'Ferramentas do seu assunto foram ativadas no estúdio.', 'xp');
+            }}
+          />
+        )}
+
         {activeTab === 'lessons' && (
           <RhymeLabAcademy
             lessons={lessons}
+            profile={profile}
             onCompleteLesson={handleCompleteLesson}
+            onOpenSkillTracks={(skillId) => {
+              setInitialSkillTab(skillId);
+              setActiveTab('tracks');
+            }}
             onSendToStudio={(customLyrics) => {
               setActiveTab('studio');
             }}
@@ -483,6 +811,7 @@ export function App() {
         {activeTab === 'challenges' && (
           <DailyChallenges
             challenges={challenges}
+            profile={profile}
             onStartChallengeInStudio={handleStartChallengeInStudio}
           />
         )}

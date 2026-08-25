@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == 'kowalski.madagascar123@gmail.com' ||
+         request.auth.token.role == 'ADMIN');
+    }
+
+    // User account documents
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+
+      match /profile/{profileId} {
+        allow read: if true; // public profile visibility for leaderboards
+        allow write: if isOwner(userId) || isAdmin();
+      }
+
+      match /lessons/{lessonId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId) || isAdmin();
+      }
+
+      match /sessions/{sessionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Community suggestions
+    match /suggestions/{suggestionId} {
+      allow read: if true;
+      allow create: if isAuthenticated() || true;
+      allow update: if isAuthenticated() || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Live Calls from teachers
+    match /live_calls/{callId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

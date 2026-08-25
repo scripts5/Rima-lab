@@ -24,8 +24,8 @@ import {
 import { UserProfile, Subscription, LiveCallSession } from '../types';
 
 interface HeaderProps {
-  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions';
-  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions') => void;
+  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions' | 'tracks';
+  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions' | 'tracks') => void;
   profile: UserProfile | null;
   subscription: Subscription | null;
   liveCall: LiveCallSession | null;
@@ -33,6 +33,7 @@ interface HeaderProps {
   onOpenPromptGen: () => void;
   onOpenAdmin: () => void;
   onOpenGmailAuth: () => void;
+  onOpenVoiceCoach?: () => void;
   isPlayingBeat: boolean;
   onToggleBeat: () => void;
   currentBeatTitle: string;
@@ -48,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPromptGen,
   onOpenAdmin,
   onOpenGmailAuth,
+  onOpenVoiceCoach,
   isPlayingBeat,
   onToggleBeat,
   currentBeatTitle,
@@ -126,6 +128,20 @@ export const Header: React.FC<HeaderProps> = ({
             title="Área Inicial & Demonstração"
           >
             <span>🏠 Início</span>
+          </button>
+
+          <button
+            id="nav-tracks-btn"
+            onClick={() => setActiveTab('tracks')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeTab === 'tracks'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-neutral-950 shadow-md scale-105'
+                : 'text-amber-400 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20'
+            }`}
+            title="Minhas Trilhas Personalizadas & Ferramentas dos Meus Assuntos"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+            <span>Minhas Trilhas ({profile?.focusSkills?.length || 3})</span>
           </button>
 
           <button
@@ -256,6 +272,22 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Actions & Status Stats */}
         <div className="flex items-center gap-2 sm:gap-2.5">
           
+          {/* Professor IA Live Voice Button */}
+          {onOpenVoiceCoach && (
+            <button
+              id="header-voice-coach-btn"
+              onClick={onOpenVoiceCoach}
+              title="Falar em tempo real com o Professor Rima IA (Gemini Live)"
+              className="flex items-center gap-1.5 rounded-xl border border-amber-500/60 bg-gradient-to-r from-amber-500 to-orange-500 px-2.5 py-1.5 text-xs font-black text-neutral-950 hover:from-amber-400 hover:to-orange-400 transition-all shadow-md shadow-amber-500/20 hover:scale-105"
+            >
+              <Mic className="h-3.5 w-3.5 text-neutral-950 animate-pulse" />
+              <span className="hidden sm:inline">Professor IA (Voz)</span>
+              <span className="rounded bg-black/30 px-1 py-0.2 text-[9px] font-black text-amber-300">
+                Live
+              </span>
+            </button>
+          )}
+
           {/* Gmail Login / 14 Days Free Trial Button */}
           <button
             id="header-gmail-btn"
@@ -354,6 +386,14 @@ export const Header: React.FC<HeaderProps> = ({
           }`}
         >
           🏠 Início
+        </button>
+        <button
+          onClick={() => setActiveTab('tracks')}
+          className={`flex-1 py-1 px-2 text-center rounded text-xs font-bold whitespace-nowrap ${
+            activeTab === 'tracks' ? 'bg-amber-500 text-neutral-950 font-black' : 'text-amber-400 bg-amber-500/10'
+          }`}
+        >
+          🎯 Trilhas ({profile?.focusSkills?.length || 3})
         </button>
         <button
           onClick={() => setActiveTab('studio')}
