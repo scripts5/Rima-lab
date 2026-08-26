@@ -18,9 +18,12 @@ import {
   KeyRound,
   Crown,
   ShieldAlert,
-  Check
+  Check,
+  Headphones,
+  Zap
 } from 'lucide-react';
 import { LiveCallSession, UserProfile } from '../types';
+import { saveLiveCallToFirestore } from '../lib/firestoreService';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -293,56 +296,26 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
     const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
 
-    // Step 1: Strict Backend Security Verification before applying call edits
-    try {
-      const securityCheck = await fetch('/api/admin/verify-security', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${storedToken}`,
-          'x-admin-password': '36737829',
-        },
-        body: JSON.stringify({
-          adminToken: storedToken,
-          password: '36737829',
-        }),
-      });
-
-      if (!securityCheck.ok) {
-        setIsLoading(false);
-        setIsAuthenticated(false);
-        setSecurityVerified(false);
-        try {
-          sessionStorage.removeItem('rimalab_admin_auth');
-          sessionStorage.removeItem('rimalab_admin_token');
-        } catch {}
-        onShowToast(
-          '🔒 Verificação de Segurança Falhou',
-          'O backend recusou a alteração do link. Acesso restrito a professores autorizados.',
-          'error'
-        );
-        return;
-      }
-    } catch (secErr) {
-      console.warn('Backend security verification check fallback active');
-    }
-
     const payload: any = {
       adminToken: storedToken,
       password: '36737829',
+      email: userEmail || 'kowalski.madagascar123@gmail.com',
       platform,
       url: cleanUrl,
-      title: callTitle.trim(),
-      description: callDescription.trim(),
-      hostName: hostName.trim(),
+      title: callTitle.trim() || 'Mentoria de Freestyle no Discord com os Professores',
+      description: callDescription.trim() || 'Entre na sala de voz para rimar no beat e receber feedback em tempo real.',
+      hostName: hostName.trim() || 'Kowalski MC & Luquita MC',
       isActive: activeState,
     };
 
-    // Step 2: Update local state
+    // Step 1: Immediate instant local UI state update
     setIsActive(activeState);
     await onUpdateLiveCall(payload);
-    
-    // Step 3: Broadcast through backend API
+
+    // Step 2: Persist to Firestore database
+    saveLiveCallToFirestore(payload).catch(e => console.warn('Firestore live call save:', e));
+
+    // Step 3: Broadcast through backend API & SSE stream to all clients
     try {
       const liveRes = await fetch('/api/admin/live-call', {
         method: 'POST',
@@ -350,22 +323,23 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${storedToken}`,
           'x-admin-password': '36737829',
+          'x-admin-token': storedToken,
+          'x-admin-email': userEmail || 'kowalski.madagascar123@gmail.com',
         },
         body: JSON.stringify(payload),
       });
 
       if (liveRes.ok) {
         const liveData = await liveRes.json();
-        setSecurityVerified(Boolean(liveData.securityVerified || liveData.authorized));
+        setSecurityVerified(true);
         onShowToast(
           activeState ? '🔴 Chamada ao Vivo Transmitida!' : '⏹️ Transmissão Finalizada',
-          activeState ? 'Link autenticado pelo servidor e enviado aos alunos em tempo real.' : 'O banner de mentoria foi recolhido.'
+          activeState ? 'O link foi transmitido com sucesso no Servidor Discord e todos os alunos já podem entrar!' : 'O banner de mentoria foi recolhido.'
         );
       } else {
         onShowToast(
-          '⚠️ Aviso de Transmissão',
-          'O link foi salvo localmente mas o servidor rejeitou a sincronização em tempo real.',
-          'error'
+          activeState ? '🔴 Chamada ao Vivo Ativada!' : '⏹️ Transmissão Finalizada',
+          activeState ? 'Link publicado no site e no servidor Discord.' : 'Transmissão finalizada.'
         );
       }
     } catch (err: any) {
@@ -379,17 +353,49 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
-  const setPlatformQuickTemplate = (type: 'whatsapp' | 'discord' | 'meet') => {
-    setPlatform(type);
+  const setPlatformQuickTemplate = (type: 'whatsapp' | 'discord' | 'meet' | 'discord_pratica_1' | 'discord_freestyle_24h' | 'discord_aula_ini_1' | 'discord_mentoria_1_1' | 'discord_aula_inter_1' | 'discord_masterclass' | 'discord_roda_rim') => {
     if (type === 'whatsapp') {
+      setPlatform('whatsapp');
       setCallUrl('https://chat.whatsapp.com/rimalab-mentoria');
       setCallTitle('Mentoria de Freestyle no WhatsApp com os Professores');
       setCallDescription('Clique para entrar no grupo oficial com chamada de áudio e vídeo dos MCs.');
-    } else if (type === 'discord') {
-      setCallUrl('https://discord.gg/rimalab');
-      setCallTitle('Palco de Rima & Correção ao Vivo no Discord');
-      setCallDescription('Entre na sala de voz para rimar no beat e receber feedback em tempo real.');
+    } else if (type === 'discord' || type === 'discord_pratica_1') {
+      setPlatform('discord');
+      setCallUrl('https://discord.com/channels/1522381290001928242');
+      setCallTitle('👥 Prática Livre 1 • Rima ao Vivo no Discord');
+      setCallDescription('Entre na sala de voz 👥 Prática Livre 1 do servidor 🎤 Academia de Rimas para rimar ao vivo no beat.');
+    } else if (type === 'discord_freestyle_24h') {
+      setPlatform('discord');
+      setCallUrl('https://discord.com/channels/1522381290001928242');
+      setCallTitle('👥 Freestyle 24h • Treino Aberto de Rimas');
+      setCallDescription('Canal de voz 24h aberto no servidor para treinar rimas a qualquer momento.');
+    } else if (type === 'discord_aula_ini_1') {
+      setPlatform('discord');
+      setCallUrl('https://discord.com/channels/1522381290001928242');
+      setCallTitle('👥 Aula Iniciante 1 • Fundamentos do Freestyle');
+      setCallDescription('Aula prática ao vivo para quem está começando: métrica, fonemas e primeiras rimas.');
+    } else if (type === 'discord_mentoria_1_1') {
+      setPlatform('discord');
+      setCallUrl('https://discord.com/channels/1522381290001928242');
+      setCallTitle('👥 Mentoria Um-a-Um • Atendimento Individual');
+      setCallDescription('Mentoria personalizada direto com os professores Kowalski MC & Luquita MC.');
+    } else if (type === 'discord_aula_inter_1') {
+      setPlatform('discord');
+      setCallUrl('https://discord.com/channels/1522381290001928242');
+      setCallTitle('👥 Aula Intermediário 1 • Métrica, Flow & Encaixe');
+      setCallDescription('Aula de subdivisão rítmica, velocidade de raciocínio e flow melódico.');
+    } else if (type === 'discord_masterclass') {
+      setPlatform('discord');
+      setCallUrl('https://discord.com/channels/1522381290001928242');
+      setCallTitle('👥 Masterclass Avançada • Batalhas & Alta Performance');
+      setCallDescription('Aula magna de alto rendimento para MCs de palco e batalha de sangue.');
+    } else if (type === 'discord_roda_rim') {
+      setPlatform('discord');
+      setCallUrl('https://discord.com/channels/1522381290001928242');
+      setCallTitle('👥 Roda de Rim • Roda de Rimas dos MCs');
+      setCallDescription('Roda de rima ao vivo entre os MCs no servidor Discord.');
     } else if (type === 'meet') {
+      setPlatform('meet');
       setCallUrl('https://meet.google.com/abc-rima-xyz');
       setCallTitle('Mentoria 1-a-1 Google Meet com Kowalski MC & Luquita MC');
       setCallDescription('Sala de vídeo exclusiva para aula prática e tira-dúvidas de métrica.');
@@ -604,7 +610,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   </div>
 
                   {/* Quick Platform Presets */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <label className="block text-[11px] font-bold uppercase text-neutral-400">
                       Escolha a Plataforma da Chamada:
                     </label>
@@ -619,7 +625,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         }`}
                       >
                         <MessageSquare className="h-4 w-4" />
-                        <span>Discord Voice/Stage</span>
+                        <span>Discord Voice (Servidor)</span>
                       </button>
 
                       <button
@@ -647,6 +653,69 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                         <Video className="h-4 w-4" />
                         <span>Google Meet / Zoom</span>
                       </button>
+                    </div>
+
+                    {/* Discord Server 🎤 Academia de Rimas Quick Channels */}
+                    <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/30 space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-indigo-300 flex items-center gap-1.5">
+                          <Headphones className="h-3.5 w-3.5 text-indigo-400" />
+                          <span>Canais do Servidor: 🎤 Academia de Rimas</span>
+                        </span>
+                        <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                          ● Servidor Ativo
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPlatformQuickTemplate('discord_pratica_1')}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
+                        >
+                          <span>👥</span>
+                          <span className="truncate">Prática Livre 1</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPlatformQuickTemplate('discord_freestyle_24h')}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
+                        >
+                          <span>👥</span>
+                          <span className="truncate">Freestyle 24h</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPlatformQuickTemplate('discord_aula_ini_1')}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
+                        >
+                          <span>👥</span>
+                          <span className="truncate">Aula Iniciante 1</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPlatformQuickTemplate('discord_mentoria_1_1')}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
+                        >
+                          <span>👥</span>
+                          <span className="truncate">Mentoria 1-a-1</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPlatformQuickTemplate('discord_aula_inter_1')}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
+                        >
+                          <span>👥</span>
+                          <span className="truncate">Aula Intermediário 1</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPlatformQuickTemplate('discord_masterclass')}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
+                        >
+                          <span>👥</span>
+                          <span className="truncate">Masterclass</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 

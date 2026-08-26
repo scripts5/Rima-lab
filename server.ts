@@ -557,6 +557,301 @@ async function startServer() {
     res.json({ liveCall: currentLiveCall, timestamp: Date.now() });
   });
 
+  // --- Discord Server Live Status & Voice Channels (Server ID: 1522381290001928242) ---
+  const DISCORD_GUILD_ID = '1522381290001928242';
+  
+  app.get(['/api/discord/server', '/api/discord/widget-status', '/api/discord/calls'], async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+
+    const defaultDiscordData = {
+      guildId: DISCORD_GUILD_ID,
+      serverName: '🎤 Academia de Rimas',
+      widgetUrl: `https://discord.com/widget?id=${DISCORD_GUILD_ID}&theme=dark`,
+      instantInvite: 'https://discord.gg/7s4Tdd9bz',
+      isLiveCallActive: currentLiveCall.isActive,
+      currentLiveCallUrl: currentLiveCall.url,
+      presenceCount: 0,
+      onlineMembers: [],
+      voiceChannels: [
+        // 🔊 Salas de Prática
+        {
+          id: 'vc_pratica_1',
+          name: '👥 Prática Livre 1',
+          category: '🔊 Salas de Prática',
+          topic: 'Sala de voz para prática de rimas ao vivo e improviso aberto',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_pratica_2',
+          name: '👥 Prática Livre 2',
+          category: '🔊 Salas de Prática',
+          topic: 'Sala de treino de rimas e troca de ideias',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_pratica_3',
+          name: '👥 Prática Livre 3',
+          category: '🔊 Salas de Prática',
+          topic: 'Rimas livres e desafios rápidos',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_studio_virtual',
+          name: '👥 Studio Virtual',
+          category: '🔊 Salas de Prática',
+          topic: 'Gravação e mixagem de improviso com instrumental',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_freestyle_24h',
+          name: '👥 Freestyle 24h',
+          category: '🔊 Salas de Prática',
+          topic: 'Canal de voz 24h aberto para treino contínuo no beat',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+
+        // 🎤 Call Aulas - Iniciante
+        {
+          id: 'vc_aula_ini_1',
+          name: '👥 Aula Iniciante 1',
+          category: '🎤 Call Aulas - Iniciante',
+          topic: 'Aulas fundamentais de rima, métrica e dicção',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_aula_ini_2',
+          name: '👥 Aula Iniciante 2',
+          category: '🎤 Call Aulas - Iniciante',
+          topic: 'Sala complementar de aula para novos MCs',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_mentoria_1_1',
+          name: '👥 Mentoria Um-a-Um',
+          category: '🎤 Call Aulas - Iniciante',
+          topic: 'Mentoria individual direta com os professores',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_workshop_ini',
+          name: '👥 Workshop Iniciante',
+          category: '🎤 Call Aulas - Iniciante',
+          topic: 'Workshops práticos de rima e ritmo no beat',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_pratica_guiada',
+          name: '👥 Prática Guiada',
+          category: '🎤 Call Aulas - Iniciante',
+          topic: 'Treino assistido passo a passo',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+
+        // 🎤 Call Aulas - Intermediário
+        {
+          id: 'vc_aula_inter_1',
+          name: '👥 Aula Intermediário 1',
+          category: '🎤 Call Aulas - Intermediário',
+          topic: 'Métrica avançada, flow melódico e encaixe no compasso',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_aula_inter_2',
+          name: '👥 Aula Intermediário 2',
+          category: '🎤 Call Aulas - Intermediário',
+          topic: 'Treino de velocidade de raciocínio e resposta',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_seminario_tec',
+          name: '👥 Seminário Técnico',
+          category: '🎤 Call Aulas - Intermediário',
+          topic: 'Seminário de estruturação lírica e figuras de linguagem',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_debate_criativo',
+          name: '👥 Debate Criativo',
+          category: '🎤 Call Aulas - Intermediário',
+          topic: 'Debate de temas para batalhas temáticas e rima de mensagem',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_jam_session',
+          name: '👥 Jam Session',
+          category: '🎤 Call Aulas - Intermediário',
+          topic: 'Jam de improviso coletivo',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+
+        // 🎤 Call Aulas - Avançado
+        {
+          id: 'vc_masterclass',
+          name: '👥 Masterclass',
+          category: '🎤 Call Aulas - Avançado',
+          topic: 'Masterclass de alto rendimento para MCs de batalha',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_mentorado_av',
+          name: '👥 Mentorado Avançado',
+          category: '🎤 Call Aulas - Avançado',
+          topic: 'Acompanhamento de MCs profissionais',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_aula_av_1',
+          name: '👥 Aula Avançado 1',
+          category: '🎤 Call Aulas - Avançado',
+          topic: 'Técnicas de contra-ataque e punchlines de 4 compassos',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_aula_av_2',
+          name: '👥 Aula Avançado 2',
+          category: '🎤 Call Aulas - Avançado',
+          topic: 'Presença cênica, respiração e leitura de jurados',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+        {
+          id: 'vc_roda_rim',
+          name: '👥 Roda de Rim',
+          category: '🎤 Call Aulas - Avançado',
+          topic: 'Roda de rima fechada de alto nível',
+          url: 'https://discord.com/channels/1522381290001928242',
+          userCount: 0,
+          isActiveCall: false,
+          users: [],
+        },
+      ],
+    };
+
+    try {
+      // Attempt to query official Discord Widget API if guild widget is enabled
+      const discordFetch = await fetch(`https://discord.com/api/guilds/${DISCORD_GUILD_ID}/widget.json`, {
+        headers: { 'User-Agent': 'RimaLab-App/1.0' },
+        signal: AbortSignal.timeout(3000),
+      });
+
+      if (discordFetch.ok) {
+        const liveWidget = await discordFetch.json();
+        
+        // Transform Discord official widget data
+        const voiceChannelsMap = new Map<string, { id: string; name: string; userCount: number; users: string[] }>();
+        
+        if (Array.isArray(liveWidget.channels)) {
+          liveWidget.channels.forEach((ch: any) => {
+            voiceChannelsMap.set(ch.id, {
+              id: ch.id,
+              name: ch.name.startsWith('🔊') ? ch.name : `🔊 ${ch.name}`,
+              userCount: 0,
+              users: [],
+            });
+          });
+        }
+
+        const membersList: any[] = [];
+        if (Array.isArray(liveWidget.members)) {
+          liveWidget.members.forEach((m: any) => {
+            const memberObj = {
+              id: m.id,
+              username: m.username,
+              avatarUrl: m.avatar_url,
+              status: m.status,
+              inCall: Boolean(m.channel_id),
+              channelId: m.channel_id,
+              channelName: m.channel_id && voiceChannelsMap.get(m.channel_id)?.name,
+              game: m.game?.name || (m.status === 'online' ? 'RimaLab Freestyle' : undefined),
+            };
+            membersList.push(memberObj);
+
+            if (m.channel_id && voiceChannelsMap.has(m.channel_id)) {
+              const ch = voiceChannelsMap.get(m.channel_id)!;
+              ch.userCount += 1;
+              ch.users.push(m.username);
+            }
+          });
+        }
+
+        const channelsArray = Array.from(voiceChannelsMap.values());
+
+        return res.json({
+          guildId: DISCORD_GUILD_ID,
+          serverName: liveWidget.name || defaultDiscordData.serverName,
+          instantInvite: liveWidget.instant_invite || defaultDiscordData.instantInvite,
+          widgetUrl: `https://discord.com/widget?id=${DISCORD_GUILD_ID}&theme=dark`,
+          presenceCount: liveWidget.presence_count || membersList.length,
+          onlineMembers: membersList.length > 0 ? membersList : defaultDiscordData.onlineMembers,
+          voiceChannels: channelsArray.length > 0 ? channelsArray : defaultDiscordData.voiceChannels,
+          isLiveCallActive: currentLiveCall.isActive,
+          currentLiveCallUrl: currentLiveCall.url,
+          fromLiveDiscordApi: true,
+        });
+      }
+    } catch (e) {
+      // Fallback to rich server representation with active rooms
+    }
+
+    res.json(defaultDiscordData);
+  });
+
   // Server-Sent Events (SSE) for Real-Time Instant Live Call Sync
   app.get('/api/live-call/stream', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');

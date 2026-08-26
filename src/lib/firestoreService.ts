@@ -229,3 +229,20 @@ export function subscribeLiveCallFromFirestore(onUpdate: (call: LiveCallSession)
     return () => {};
   }
 }
+
+/**
+ * Saves or updates the active Live Call Session in Firestore for all users
+ */
+export async function saveLiveCallToFirestore(callData: Partial<LiveCallSession>): Promise<boolean> {
+  try {
+    const liveCallDocRef = doc(db, 'live_calls', 'active');
+    await setDoc(liveCallDocRef, {
+      ...callData,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  } catch (error) {
+    console.warn('Error saving live call to Firestore:', error);
+    return false;
+  }
+}

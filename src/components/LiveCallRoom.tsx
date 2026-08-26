@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Video, 
   Radio, 
@@ -17,7 +17,17 @@ import {
   Square,
   MessageSquare,
   Award,
-  RefreshCw
+  RefreshCw,
+  Headphones,
+  Zap,
+  Globe,
+  Swords,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  CheckCircle2,
+  Share2,
+  VolumeX
 } from 'lucide-react';
 import { LiveCallSession, UserProfile, Subscription, Beat } from '../types';
 import { PRESET_BEATS, globalBeatEngine } from '../lib/audio/beatEngine';
@@ -37,6 +47,245 @@ interface LiveCallRoomProps {
   onShowToast: (title: string, desc: string, type?: 'xp' | 'ach' | 'info') => void;
 }
 
+export interface DiscordVoiceChannel {
+  id: string;
+  name: string;
+  category: '🔊 Salas de Prática' | '🎤 Call Aulas - Iniciante' | '🎤 Call Aulas - Intermediário' | '🎤 Call Aulas - Avançado' | string;
+  topic?: string;
+  url?: string;
+  userCount: number;
+  isActiveCall?: boolean;
+  users: string[];
+}
+
+export interface DiscordServerStatus {
+  guildId: string;
+  serverName: string;
+  instantInvite: string;
+  widgetUrl: string;
+  presenceCount: number;
+  isLiveCallActive: boolean;
+  voiceChannels: DiscordVoiceChannel[];
+  onlineMembers: Array<{
+    id: string;
+    username: string;
+    status: string;
+    role?: string;
+    inCall?: boolean;
+    channelName?: string;
+  }>;
+}
+
+const DEFAULT_CHANNELS: DiscordVoiceChannel[] = [
+  // 🔊 Salas de Prática
+  {
+    id: 'vc_pratica_1',
+    name: '👥 Prática Livre 1',
+    category: '🔊 Salas de Prática',
+    topic: 'Sala de voz para prática de rimas ao vivo e improviso aberto',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_pratica_2',
+    name: '👥 Prática Livre 2',
+    category: '🔊 Salas de Prática',
+    topic: 'Sala de treino de rimas e troca de ideias',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_pratica_3',
+    name: '👥 Prática Livre 3',
+    category: '🔊 Salas de Prática',
+    topic: 'Rimas livres e desafios rápidos',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_studio_virtual',
+    name: '👥 Studio Virtual',
+    category: '🔊 Salas de Prática',
+    topic: 'Gravação e mixagem de improviso com instrumental',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_freestyle_24h',
+    name: '👥 Freestyle 24h',
+    category: '🔊 Salas de Prática',
+    topic: 'Canal de voz 24h aberto para treino contínuo no beat',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+
+  // 🎤 Call Aulas - Iniciante
+  {
+    id: 'vc_aula_ini_1',
+    name: '👥 Aula Iniciante 1',
+    category: '🎤 Call Aulas - Iniciante',
+    topic: 'Aulas fundamentais de rima, métrica e dicção',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_aula_ini_2',
+    name: '👥 Aula Iniciante 2',
+    category: '🎤 Call Aulas - Iniciante',
+    topic: 'Sala complementar de aula para novos MCs',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_mentoria_1_1',
+    name: '👥 Mentoria Um-a-Um',
+    category: '🎤 Call Aulas - Iniciante',
+    topic: 'Mentoria individual direta com os professores',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_workshop_ini',
+    name: '👥 Workshop Iniciante',
+    category: '🎤 Call Aulas - Iniciante',
+    topic: 'Workshops práticos de rima e ritmo no beat',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_pratica_guiada',
+    name: '👥 Prática Guiada',
+    category: '🎤 Call Aulas - Iniciante',
+    topic: 'Treino assistido passo a passo',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+
+  // 🎤 Call Aulas - Intermediário
+  {
+    id: 'vc_aula_inter_1',
+    name: '👥 Aula Intermediário 1',
+    category: '🎤 Call Aulas - Intermediário',
+    topic: 'Métrica avançada, flow melódico e encaixe no compasso',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_aula_inter_2',
+    name: '👥 Aula Intermediário 2',
+    category: '🎤 Call Aulas - Intermediário',
+    topic: 'Treino de velocidade de raciocínio e resposta',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_seminario_tec',
+    name: '👥 Seminário Técnico',
+    category: '🎤 Call Aulas - Intermediário',
+    topic: 'Seminário de estruturação lírica e figuras de linguagem',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_debate_criativo',
+    name: '👥 Debate Criativo',
+    category: '🎤 Call Aulas - Intermediário',
+    topic: 'Debate de temas para batalhas temáticas e rima de mensagem',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_jam_session',
+    name: '👥 Jam Session',
+    category: '🎤 Call Aulas - Intermediário',
+    topic: 'Jam de improviso coletivo',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+
+  // 🎤 Call Aulas - Avançado
+  {
+    id: 'vc_masterclass',
+    name: '👥 Masterclass',
+    category: '🎤 Call Aulas - Avançado',
+    topic: 'Masterclass de alto rendimento para MCs de batalha',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_mentorado_av',
+    name: '👥 Mentorado Avançado',
+    category: '🎤 Call Aulas - Avançado',
+    topic: 'Acompanhamento de MCs profissionais',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_aula_av_1',
+    name: '👥 Aula Avançado 1',
+    category: '🎤 Call Aulas - Avançado',
+    topic: 'Técnicas de contra-ataque e punchlines de 4 compassos',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_aula_av_2',
+    name: '👥 Aula Avançado 2',
+    category: '🎤 Call Aulas - Avançado',
+    topic: 'Presença cênica, respiração e leitura de jurados',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+  {
+    id: 'vc_roda_rim',
+    name: '👥 Roda de Rim',
+    category: '🎤 Call Aulas - Avançado',
+    topic: 'Roda de rima fechada de alto nível',
+    url: 'https://discord.com/channels/1522381290001928242',
+    userCount: 0,
+    isActiveCall: false,
+    users: [],
+  },
+];
+
 export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
   liveCall,
   profile,
@@ -52,11 +301,60 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
   onShowToast,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
   const [selectedBeatId, setSelectedBeatId] = useState(currentBeat.id);
+  const [isRefreshingDiscord, setIsRefreshingDiscord] = useState(false);
+  const [showDiscordWidgetEmbed, setShowDiscordWidgetEmbed] = useState(false);
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const isCallActive = liveCall ? (liveCall.isActive !== false) : true;
-  const rawUrl = (liveCall?.url || 'https://discord.gg/rimalab').trim();
+  // Discord Server 1522381290001928242 live status
+  const [discordStatus, setDiscordStatus] = useState<DiscordServerStatus>({
+    guildId: '1522381290001928242',
+    serverName: '🎤 Academia de Rimas',
+    instantInvite: 'https://discord.gg/7s4Tdd9bz',
+    widgetUrl: 'https://discord.com/widget?id=1522381290001928242&theme=dark',
+    presenceCount: 0,
+    isLiveCallActive: false,
+    voiceChannels: DEFAULT_CHANNELS,
+    onlineMembers: [],
+  });
+
+  const fetchDiscordServerStatus = async () => {
+    setIsRefreshingDiscord(true);
+    try {
+      const res = await fetch('/api/discord/server');
+      if (res.ok) {
+        const data = await res.json();
+        setDiscordStatus(prev => ({
+          ...prev,
+          guildId: data.guildId || prev.guildId,
+          serverName: data.serverName || prev.serverName,
+          instantInvite: data.instantInvite || prev.instantInvite,
+          widgetUrl: data.widgetUrl || prev.widgetUrl,
+          presenceCount: typeof data.presenceCount === 'number' ? data.presenceCount : 0,
+          isLiveCallActive: Boolean(data.isLiveCallActive),
+          voiceChannels: (data.voiceChannels && data.voiceChannels.length > 0) ? data.voiceChannels : DEFAULT_CHANNELS,
+          onlineMembers: data.onlineMembers || [],
+        }));
+      }
+    } catch (e) {
+      console.warn('Discord server status fetch fallback:', e);
+    } finally {
+      setIsRefreshingDiscord(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDiscordServerStatus();
+    const interval = setInterval(fetchDiscordServerStatus, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const isCallActive = liveCall ? (liveCall.isActive !== false) : false;
+  const rawUrl = (liveCall?.url || 'https://discord.gg/7s4Tdd9bz').trim();
   const currentUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+  const inviteUrl = discordStatus.instantInvite || 'https://discord.gg/7s4Tdd9bz';
   const platform = liveCall?.platform || 'discord';
 
   const handleCopyLink = () => {
@@ -66,57 +364,38 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
     setTimeout(() => setCopied(false), 2500);
   };
 
-  const getPlatformDetails = () => {
-    switch (platform) {
-      case 'whatsapp':
-        return {
-          name: 'WhatsApp Chamada / Grupo',
-          color: 'from-emerald-600 to-green-700',
-          borderColor: 'border-emerald-500/40',
-          badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-          icon: '💬',
-          actionText: 'Abrir no WhatsApp Web / App',
-        };
-      case 'discord':
-        return {
-          name: 'Discord Sala de Voz / Palco',
-          color: 'from-[#5865F2] to-indigo-800',
-          borderColor: 'border-indigo-500/40',
-          badgeBg: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
-          icon: '🎧',
-          actionText: 'Entrar no Servidor do Discord',
-        };
-      case 'meet':
-        return {
-          name: 'Google Meet',
-          color: 'from-blue-600 to-cyan-700',
-          borderColor: 'border-blue-500/40',
-          badgeBg: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-          icon: '📹',
-          actionText: 'Entrar na Reunião Google Meet',
-        };
-      case 'zoom':
-        return {
-          name: 'Zoom Video',
-          color: 'from-sky-600 to-blue-800',
-          borderColor: 'border-sky-500/40',
-          badgeBg: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
-          icon: '🎥',
-          actionText: 'Abrir Reunião no Zoom',
-        };
-      default:
-        return {
-          name: 'Sala de Vídeo',
-          color: 'from-amber-600 to-orange-700',
-          borderColor: 'border-amber-500/40',
-          badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-          icon: '🎙️',
-          actionText: 'Entrar na Chamada',
-        };
-    }
+  const handleCopyInvite = () => {
+    navigator.clipboard.writeText(inviteUrl);
+    setCopiedInvite(true);
+    onShowToast('📋 Convite Discord Copiado!', `Link ${inviteUrl} copiado para a área de transferência.`);
+    setTimeout(() => setCopiedInvite(false), 2500);
   };
 
-  const platformInfo = getPlatformDetails();
+  const handleCopyChannelLink = (channelName: string, channelUrl: string) => {
+    navigator.clipboard.writeText(channelUrl);
+    onShowToast('📋 Link da Call Copiado!', `Link direto para "${channelName}" copiado.`);
+  };
+
+  // Total people in calls calculation (actual detection)
+  const totalOccupants = discordStatus.voiceChannels.reduce((sum, ch) => sum + (ch.userCount || 0), 0);
+
+  // Filter channels
+  const filteredChannels = discordStatus.voiceChannels.filter((ch) => {
+    const matchesCategory = activeCategoryFilter === 'all' || ch.category === activeCategoryFilter;
+    const matchesSearch = !searchQuery || 
+      ch.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (ch.topic && ch.topic.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (ch.category && ch.category.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesCategory && matchesSearch;
+  });
+
+  const categories = [
+    { id: 'all', label: 'Todas as Calls', count: discordStatus.voiceChannels.length },
+    { id: '🔊 Salas de Prática', label: '🔊 Salas de Prática', count: discordStatus.voiceChannels.filter(c => c.category === '🔊 Salas de Prática').length },
+    { id: '🎤 Call Aulas - Iniciante', label: '🎤 Iniciante', count: discordStatus.voiceChannels.filter(c => c.category === '🎤 Call Aulas - Iniciante').length },
+    { id: '🎤 Call Aulas - Intermediário', label: '🎤 Intermediário', count: discordStatus.voiceChannels.filter(c => c.category === '🎤 Call Aulas - Intermediário').length },
+    { id: '🎤 Call Aulas - Avançado', label: '🎤 Avançado', count: discordStatus.voiceChannels.filter(c => c.category === '🎤 Call Aulas - Avançado').length },
+  ];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-8 animate-in fade-in duration-300">
@@ -125,207 +404,379 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800 pb-6">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex h-3 w-3 rounded-full bg-red-500 animate-pulse" />
-            <span className="text-xs font-black tracking-widest uppercase text-red-400">
-              AULAS & MENTORIA AO VIVO
+            <span className="flex h-3 w-3 relative">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                isCallActive ? 'bg-red-400' : 'bg-emerald-400'
+              }`} />
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                isCallActive ? 'bg-red-500' : 'bg-emerald-500'
+              }`} />
             </span>
-            <span className="rounded-full bg-neutral-900 border border-neutral-800 px-2 py-0.5 text-[10px] font-bold text-neutral-400">
-              Kowalski MC & Luquita MC
+            <span className={`text-xs font-black uppercase tracking-wider ${
+              isCallActive ? 'text-red-400' : 'text-emerald-400'
+            }`}>
+              {isCallActive ? '● Transmissão de Aula Ativa' : '● Servidor de Voz Online'}
             </span>
           </div>
-          <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            Sala de <span className="text-amber-400">Calls & Treino</span>
+          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1 flex items-center gap-2.5">
+            <span>Chamadas de Voz & Aulas ao Vivo</span>
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
+              Discord
+            </span>
           </h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            Conecte-se em tempo real com os professores para treinar métrica, flow e receber correções no beat.
+          <p className="text-sm text-neutral-400 mt-1 max-w-2xl">
+            Entre nas salas de voz oficiais do servidor <strong>🎤 Academia de Rimas</strong> para praticar improviso no beat e participar de mentorias com os professores Kowalski MC & Luquita MC.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {onOpenVoiceCoach && (
-            <button
-              id="call-room-voice-coach-btn"
-              onClick={onOpenVoiceCoach}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-xs font-black text-neutral-950 hover:from-amber-400 hover:to-orange-400 transition-all shadow-md shadow-amber-500/20 hover:scale-105"
-            >
-              <Mic className="h-4 w-4 animate-pulse" />
-              <span>🎙️ Treinar com Professor IA (Voz)</span>
-            </button>
-          )}
+        {/* Action Controls */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            onClick={fetchDiscordServerStatus}
+            disabled={isRefreshingDiscord}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-neutral-900 border border-neutral-700 hover:border-neutral-500 text-xs font-bold text-neutral-200 transition-colors"
+            title="Atualizar status e presença no Discord"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 text-amber-400 ${isRefreshingDiscord ? 'animate-spin' : ''}`} />
+            <span>{isRefreshingDiscord ? 'Sincronizando...' : 'Atualizar Calls'}</span>
+          </button>
 
-          <button
-            id="call-room-admin-btn"
-            onClick={onOpenAdmin}
-            className="flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900 px-3.5 py-2 text-xs font-bold text-neutral-300 hover:border-amber-500/50 hover:text-amber-300 transition-colors"
+          <a
+            href={inviteUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#5865F2] hover:bg-[#4752c4] text-white text-xs font-black shadow-lg shadow-[#5865F2]/25 transition-all hover:scale-105"
           >
-            <span>👑</span>
-            <span>Painel do Professor</span>
-          </button>
-          
-          <button
-            id="call-room-studio-btn"
-            onClick={onOpenStudio}
-            className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-bold text-amber-400 hover:bg-amber-500 hover:text-neutral-950 transition-all"
-          >
-            <Mic className="h-4 w-4" />
-            <span>Abrir Studio</span>
-          </button>
+            <MessageSquare className="h-3.5 w-3.5" />
+            <span>Entrar no Discord</span>
+            <ExternalLink className="h-3 w-3" />
+          </a>
         </div>
       </div>
 
-      {/* AI Voice Professor 24/7 Spotlight */}
-      {onOpenVoiceCoach && (
-        <div className="relative overflow-hidden rounded-3xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-neutral-900 to-orange-950/40 p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500 text-neutral-950 font-black text-2xl shadow-lg shadow-amber-500/30 shrink-0">
-              <Mic className="h-6 w-6 text-neutral-950 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-extrabold text-white">
-                  Treinador Vocal IA Disponível 24/7
-                </h3>
-                <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-bold text-amber-300">
-                  Gemini Live Audio
-                </span>
-              </div>
-              <p className="text-xs text-neutral-300 mt-0.5">
-                Converse por voz com o Professor Rima IA para receber correções de métrica, exercícios de speed flow e trocas de rimas no microfone.
-              </p>
-            </div>
-          </div>
-
-          <button
-            id="spotlight-voice-coach-btn"
-            onClick={onOpenVoiceCoach}
-            className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all hover:scale-105 shrink-0 flex items-center justify-center gap-2"
-          >
-            <Sparkles className="h-4 w-4 text-neutral-950" />
-            <span>Abrir Conversa de Voz com IA</span>
-          </button>
-        </div>
-      )}
-
-      {/* Main Broadcast Stage */}
-      {isCallActive ? (
-        <div className="relative overflow-hidden rounded-3xl border border-red-500/40 bg-gradient-to-b from-neutral-900 via-neutral-950 to-neutral-950 p-6 sm:p-10 shadow-2xl shadow-red-950/20">
-          <div className="absolute top-0 right-0 h-96 w-96 rounded-full bg-red-600/10 blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-0 h-96 w-96 rounded-full bg-amber-600/10 blur-3xl pointer-events-none" />
-
-          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
-            
-            {/* Left: Status & Details */}
-            <div className="space-y-4 max-w-2xl">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 text-xs font-black text-white shadow-lg shadow-red-600/40 animate-pulse">
-                  <Radio className="h-3.5 w-3.5" />
-                  <span>TRANSMISSÃO AO VIVO ATIVA</span>
-                </span>
-                <span className={`rounded-full border px-3 py-1 text-xs font-bold ${platformInfo.badgeBg}`}>
-                  {platformInfo.icon} {platformInfo.name}
-                </span>
-                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/40 px-2.5 py-1 text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Sincronizado em Tempo Real (0ms)</span>
-                </span>
-              </div>
-
-              <div>
-                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                  {liveCall.title || 'Mentoria Prática de Freestyle'}
-                </h2>
-                <p className="mt-2 text-sm sm:text-base text-neutral-300 leading-relaxed">
-                  {liveCall.description || 'Entre para rimar ao vivo no beat e receber feedback detalhado com os MCs professores.'}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4 text-xs text-neutral-400 pt-2 border-t border-neutral-800">
-                <div className="flex items-center gap-1.5">
-                  <Users className="h-4 w-4 text-amber-400" />
-                  <span>Host: <strong className="text-white">{liveCall.hostName || 'Kowalski MC & Luquita MC'}</strong></span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
-                  <span>Acesso: <strong className="text-emerald-300">Liberado para Alunos</strong></span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Big Interactive Join Actions */}
-            <div className="w-full lg:w-auto flex flex-col gap-3 shrink-0 bg-neutral-900/80 p-5 rounded-2xl border border-neutral-800/80 shadow-xl">
-              <span className="text-[11px] font-bold text-neutral-400 text-center uppercase tracking-wider">
-                Clique para se conectar agora
+      {/* Official Discord Server Invite Card (CONVITE PARA ENTRAR NO SERVIDOR) */}
+      <div className="rounded-3xl border border-indigo-500/50 bg-gradient-to-r from-indigo-950/70 via-neutral-950 to-neutral-950 p-6 sm:p-7 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-[#5865F2]/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 rounded-full bg-[#5865F2] px-3 py-1 text-[11px] font-black text-white shadow-md shadow-[#5865F2]/30">
+                <Headphones className="h-3.5 w-3.5" />
+                <span>SERVIDOR OFICIAL DISCORD</span>
               </span>
-
-              <a
-                id="main-enter-call-btn"
-                href={currentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 px-8 py-4 text-base font-black text-white hover:from-red-500 hover:to-amber-500 shadow-xl shadow-red-600/30 transition-all hover:scale-105 active:scale-95 text-center"
-              >
-                <Video className="h-6 w-6" />
-                <span>Entrar na Chamada de Vídeo 🚀</span>
-                <ExternalLink className="h-4 w-4" />
-              </a>
-
-              <div className="flex items-center gap-2">
-                <div className="flex-1 truncate rounded-xl bg-neutral-950 border border-neutral-800 px-3 py-2 text-xs text-neutral-400 font-mono">
-                  {currentUrl}
-                </div>
-                <button
-                  id="copy-call-url-btn"
-                  onClick={handleCopyLink}
-                  title="Copiar Link da Chamada"
-                  className="flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white transition-colors"
-                >
-                  {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  <span>{copied ? 'Copiado!' : 'Copiar'}</span>
-                </button>
-              </div>
-
-              <p className="text-[10px] text-neutral-500 text-center">
-                Você será redirecionado para a sala de vídeo/voz oficial.
-              </p>
+              <span className="rounded-full bg-neutral-900 border border-neutral-700 px-2.5 py-0.5 text-[10px] font-mono font-bold text-amber-400">
+                ID: 1522381290001928242
+              </span>
+              <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Detector de Voz Ativo</span>
+              </span>
             </div>
 
-          </div>
-        </div>
-      ) : (
-        /* Offline State / Standby Schedule */
-        <div className="rounded-3xl border border-neutral-800 bg-neutral-900/60 p-8 sm:p-10 text-center space-y-6">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
-            <Radio className="h-8 w-8 text-amber-500" />
-          </div>
-
-          <div className="max-w-xl mx-auto space-y-2">
-            <h2 className="text-2xl font-bold text-white">Nenhuma chamada ao vivo no momento</h2>
-            <p className="text-sm text-neutral-400">
-              Os professores Luquita MC & Kowalski MC iniciam as mentorias de métrica e treino em horários programados. Fique atento às notificações!
+            <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+              <span>{discordStatus.serverName || '🎤 Academia de Rimas'}</span>
+            </h2>
+            <p className="text-xs sm:text-sm text-neutral-300 max-w-2xl leading-relaxed">
+              Use o convite oficial abaixo para entrar no servidor, desbloquear os cargos de MC, acessar todas as <strong>20 salas de voz</strong> e trocar ideias no chat de texto.
             </p>
+
+            {/* Invite URL Display & Copy */}
+            <div className="pt-2 flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-neutral-900/90 border border-neutral-700 font-mono text-xs text-indigo-300">
+                <span>🔗 Convite:</span>
+                <span className="text-white font-bold">{inviteUrl}</span>
+              </div>
+
+              <button
+                onClick={handleCopyInvite}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-xs font-bold text-neutral-200 transition-colors"
+              >
+                {copiedInvite ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-neutral-400" />}
+                <span>{copiedInvite ? 'Copiado!' : 'Copiar Convite'}</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-            <button
-              onClick={onOpenAdmin}
-              className="flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-xs font-bold text-neutral-950 hover:bg-amber-400 transition-colors"
-            >
-              <span>👑 É um Professor? Iniciar Chamada Agora</span>
-            </button>
+          {/* Direct CTA Buttons */}
+          <div className="flex flex-col sm:flex-row lg:flex-col gap-3 shrink-0">
             <a
-              href="https://discord.gg/rimalab"
+              href={inviteUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-xl border border-[#5865F2]/40 bg-[#5865F2]/20 px-5 py-3 text-xs font-bold text-indigo-300 hover:bg-[#5865F2]/30 transition-colors"
+              className="flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-[#5865F2] hover:bg-[#4752c4] text-white text-sm font-black shadow-xl shadow-[#5865F2]/30 transition-all hover:scale-105 active:scale-95"
             >
-              <span>🎧 Sala de Espera no Discord</span>
+              <MessageSquare className="h-4 w-4" />
+              <span>Entrar no Servidor Oficial</span>
               <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+
+            <a
+              href="https://discord.com/channels/1522381290001928242"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-200 text-xs font-bold transition-colors"
+            >
+              <Headphones className="h-3.5 w-3.5 text-indigo-400" />
+              <span>Abrir Navegador / App Discord</span>
             </a>
           </div>
         </div>
+      </div>
+
+      {/* Live Call Broadcast Banner (when Professor starts a Live Class) */}
+      {isCallActive && liveCall && (
+        <div className="rounded-3xl border border-red-500/60 bg-gradient-to-r from-red-950/80 via-neutral-950 to-neutral-950 p-6 sm:p-7 shadow-2xl space-y-4 animate-in fade-in">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-full bg-red-600 text-white font-black text-xs animate-pulse flex items-center gap-1.5">
+                <Radio className="h-3.5 w-3.5" />
+                <span>AULA AO VIVO AGORA</span>
+              </span>
+              <span className="text-xs text-neutral-400 font-medium">
+                Host: <strong className="text-white">{liveCall.hostName || 'Kowalski MC & Luquita MC'}</strong>
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopyLink}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700 text-xs font-bold text-neutral-200 hover:border-neutral-500 transition-colors"
+              >
+                {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-neutral-400" />}
+                <span>{copied ? 'Link Copiado' : 'Copiar Link'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xl sm:text-2xl font-black text-white">{liveCall.title || 'Mentoria Prática ao Vivo'}</h3>
+            <p className="text-xs sm:text-sm text-neutral-300 mt-1">{liveCall.description}</p>
+          </div>
+
+          <div className="pt-2 flex flex-wrap items-center gap-3">
+            <a
+              href={currentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs shadow-lg shadow-red-600/30 transition-all hover:scale-105"
+            >
+              <Headphones className="h-4 w-4" />
+              <span>Entrar na Aula ao Vivo Agora</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+
+            <button
+              onClick={onOpenAdmin}
+              className="flex items-center gap-1.5 px-4 py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-xs font-bold text-neutral-300 transition-colors"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-amber-400" />
+              <span>Painel do Professor</span>
+            </button>
+          </div>
+        </div>
       )}
 
-      {/* Interactive Beat Player & Training Sandbox */}
+      {/* Voice Channels Section Header & Filter Controls */}
+      <div className="space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Headphones className="h-5 w-5 text-indigo-400" />
+              <h2 className="text-xl sm:text-2xl font-black text-white">
+                Salas de Voz do Discord (20 Calls)
+              </h2>
+            </div>
+            <p className="text-xs sm:text-sm text-neutral-400">
+              Detector em tempo real: clique em qualquer sala para entrar diretamente na conversa com instrumental ou mentor.
+            </p>
+          </div>
+
+          {/* Real-time Occupants Live Detector Badge */}
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-neutral-900 border border-neutral-800">
+            <span className={`h-2.5 w-2.5 rounded-full ${totalOccupants > 0 ? 'bg-red-500 animate-pulse' : 'bg-emerald-400'}`} />
+            <span className="text-xs font-bold text-neutral-200">
+              {totalOccupants > 0 
+                ? `${totalOccupants} pessoas rimando nas calls`
+                : '0 pessoas nas calls no momento (Salas Livres)'
+              }
+            </span>
+          </div>
+        </div>
+
+        {/* Search & Category Filter Tabs */}
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {categories.map((cat) => {
+              const isSelected = activeCategoryFilter === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategoryFilter(cat.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                      : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 border border-neutral-800'
+                  }`}
+                >
+                  <span>{cat.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                    isSelected ? 'bg-white/20 text-white' : 'bg-neutral-800 text-neutral-500'
+                  }`}>
+                    {cat.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Search Box */}
+          <div className="relative min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-neutral-500" />
+            <input
+              type="text"
+              placeholder="Buscar canal de voz..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-indigo-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Voice Channels Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredChannels.map((channel) => {
+          const hasUsers = channel.users && channel.users.length > 0;
+          const channelUrl = channel.url || `https://discord.com/channels/1522381290001928242`;
+          const isMentoria = channel.id.includes('mentoria') || channel.name.includes('Mentoria') || channel.name.includes('Aula');
+
+          return (
+            <div
+              key={channel.id}
+              className={`rounded-2xl border p-5 transition-all flex flex-col justify-between gap-4 ${
+                hasUsers
+                  ? 'border-indigo-500/50 bg-gradient-to-b from-indigo-950/30 to-neutral-900 shadow-lg shadow-indigo-950/20'
+                  : 'border-neutral-800 bg-neutral-900/60 hover:border-neutral-700'
+              }`}
+            >
+              <div className="space-y-2.5">
+                {/* Channel Category Tag & Live Badge */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-neutral-400 bg-neutral-800 px-2 py-0.5 rounded-md">
+                    {channel.category}
+                  </span>
+
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
+                    hasUsers
+                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                      : 'bg-neutral-800/80 border-neutral-700 text-neutral-400'
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${hasUsers ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'}`} />
+                    <span>{hasUsers ? `👥 ${channel.userCount} na call` : '0 pessoas (Livre)'}</span>
+                  </span>
+                </div>
+
+                {/* Channel Title & Topic */}
+                <div>
+                  <h4 className="text-base font-black text-white flex items-center gap-2">
+                    <Headphones className="h-4 w-4 text-indigo-400 shrink-0" />
+                    <span>{channel.name}</span>
+                  </h4>
+                  {channel.topic && (
+                    <p className="text-xs text-neutral-400 mt-1 line-clamp-2 leading-relaxed">
+                      {channel.topic}
+                    </p>
+                  )}
+                </div>
+
+                {/* Detected Live Occupants (shows actual users if any detected) */}
+                {hasUsers && (
+                  <div className="pt-2 border-t border-neutral-800">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1.5 flex items-center gap-1">
+                      <Mic className="h-3 w-3 text-emerald-400 animate-pulse" />
+                      <span>Falando na call agora:</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {channel.users.map((uname, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 flex items-center gap-1"
+                        >
+                          <span>🎤</span>
+                          <span>{uname}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons for this specific voice channel */}
+              <div className="pt-3 border-t border-neutral-800/80 flex items-center gap-2">
+                <a
+                  href={channelUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#5865F2] hover:bg-[#4752c4] text-white text-xs font-black shadow-md shadow-[#5865F2]/20 transition-all hover:scale-[1.02] active:scale-95"
+                >
+                  <Headphones className="h-3.5 w-3.5" />
+                  <span>Entrar na Call</span>
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => handleCopyChannelLink(channel.name, channelUrl)}
+                  className="p-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 hover:text-white transition-colors"
+                  title="Copiar link desta chamada"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Embedded Discord Widget Viewer Toggle */}
+      <div className="rounded-3xl border border-neutral-800 bg-neutral-950 p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Globe className="h-4 w-4 text-indigo-400" />
+              <span>Widget Oficial do Discord (Servidor ID: 1522381290001928242)</span>
+            </h3>
+            <p className="text-xs text-neutral-400">
+              Visualização integrada fornecida diretamente pelo Discord.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setShowDiscordWidgetEmbed(!showDiscordWidgetEmbed)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700 text-xs font-bold text-indigo-300 hover:text-white transition-colors"
+          >
+            {showDiscordWidgetEmbed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            <span>{showDiscordWidgetEmbed ? 'Ocultar Widget' : 'Visualizar Widget'}</span>
+          </button>
+        </div>
+
+        {showDiscordWidgetEmbed && (
+          <div className="rounded-2xl overflow-hidden border border-neutral-800 bg-neutral-900 p-2 animate-in fade-in">
+            <iframe
+              src={`https://discord.com/widget?id=1522381290001928242&theme=dark`}
+              width="100%"
+              height="380"
+              frameBorder="0"
+              sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+              title="Discord Server Widget"
+              className="rounded-xl w-full"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Interactive Beat Player & Guidelines Sandbox */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Quick Beat Player */}
@@ -350,7 +801,7 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
           </div>
 
           <p className="text-xs text-neutral-400">
-            Selecione o beat abaixo para aquecer antes de entrar na call ou tocar durante o seu round com os professores:
+            Selecione o instrumental abaixo para aquecer antes de entrar na call ou tocar durante o seu round com os professores:
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -472,8 +923,8 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
                 <Clock className="h-3 w-3" /> 16:00
               </span>
             </div>
-            <h4 className="text-sm font-bold text-white">Roda de Batalha & Duelo de Alunos</h4>
-            <p className="text-xs text-neutral-400">Duelos 1-a-1 avaliados ao vivo pelos professores com ranking de XP.</p>
+            <h4 className="text-sm font-bold text-white">Arena de Batalhas 1v1 & Roda de Rima</h4>
+            <p className="text-xs text-neutral-400">Simulação de duelo real entre alunos com jurados e feedback ao vivo.</p>
           </div>
         </div>
       </div>
