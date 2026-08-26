@@ -82,6 +82,47 @@ class AIVoiceTutorEngine {
     this.synth.speak(utterance);
   }
 
+  public speakEvaluationCommentary(
+    mcName: string,
+    overallScore: number,
+    verdict: string,
+    feedback: string,
+    strength?: string,
+    improvement?: string,
+    options: VoiceTutorOptions = {}
+  ) {
+    let text = `Salve, ${mcName || 'MC'}! Professor Rima na escuta! `;
+    if (overallScore >= 85) {
+      text += `Você amassou a rima! Pontuação ${overallScore} pontos, nível ${verdict}! `;
+    } else if (overallScore >= 70) {
+      text += `Boa levada! Você fez ${overallScore} pontos, nível ${verdict}! `;
+    } else {
+      text += `Treino firme! Você bateu ${overallScore} pontos! `;
+    }
+
+    if (feedback) {
+      // Keep only first 2 sentences for audio conciseness
+      const cleanFeedback = feedback.split('.').slice(0, 2).join('.').trim();
+      text += `${cleanFeedback}. `;
+    }
+
+    if (strength) {
+      text += `Ponto forte: ${strength}. `;
+    }
+
+    if (improvement) {
+      text += `Dica de ouro pro próximo verso: ${improvement}. `;
+    }
+
+    text += `Bora pra próxima rima no beat!`;
+
+    this.speak(text, {
+      ...options,
+      rate: 1.08,
+      pitch: 0.96,
+    });
+  }
+
   public stop() {
     if (this.synth) {
       this.synth.cancel();

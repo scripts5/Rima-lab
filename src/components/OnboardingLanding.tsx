@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Mic, 
   Headphones, 
@@ -15,10 +15,130 @@ import {
   ShieldCheck, 
   Volume2,
   Users,
-  Radio
+  Radio,
+  Hash,
+  Layers,
+  Check,
+  Plus
 } from 'lucide-react';
 import { UserProfile, Beat, BattleTrainingType, SkillFocusType } from '../types';
 import { PRESET_BEATS, globalBeatEngine } from '../lib/audio/beatEngine';
+
+export interface DiscordRoleItem {
+  id: string;
+  name: string;
+  badge: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  description: string;
+  unlockedCategories: string[];
+  unlockedChannels: string[];
+  suggestedStyle: string;
+  suggestedTrainingType: BattleTrainingType;
+  skills: SkillFocusType[];
+}
+
+export const DISCORD_ROLES: DiscordRoleItem[] = [
+  {
+    id: 'mc_batalha_sangue',
+    name: 'MC de Batalha (Sangue)',
+    badge: '⚔️',
+    color: 'text-red-400',
+    bgColor: 'bg-red-950/40',
+    borderColor: 'border-red-500/50',
+    description: 'Ataque, respostas instantâneas, rimas agressivas e postura de palco.',
+    unlockedCategories: ['Punchlines', 'Batalhas & Improviso', 'Drill'],
+    unlockedChannels: ['#batalha-sangue', '#cypher-ao-vivo', '#arena-versus'],
+    suggestedStyle: 'Drill',
+    suggestedTrainingType: 'sangue',
+    skills: ['punchline', 'encaixe_beat', 'flow'],
+  },
+  {
+    id: 'speed_flow_master',
+    name: 'Speed Flow Master',
+    badge: '⚡',
+    color: 'text-amber-400',
+    bgColor: 'bg-amber-950/40',
+    borderColor: 'border-amber-500/50',
+    description: 'Velocidade extrema, métrica acelerada, dicção e respiração no beat.',
+    unlockedCategories: ['Speed Flow', 'Métrica & Flow', 'Double Time'],
+    unlockedChannels: ['#speedflow-treino', '#metronomo-desafios', '#diccao-rapida'],
+    suggestedStyle: 'Speed Flow',
+    suggestedTrainingType: 'gastacao',
+    skills: ['speedflow', 'encaixe_beat', 'contagem_versos'],
+  },
+  {
+    id: 'mc_ideologico',
+    name: 'MC Ideológico & Visão',
+    badge: '💡',
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-950/40',
+    borderColor: 'border-cyan-500/50',
+    description: 'Mensagem profunda, poesia marginal, reflexão e versos construtivos.',
+    unlockedCategories: ['Ideológica', 'Fundamentos', 'Poesia de Rua'],
+    unlockedChannels: ['#rimas-ideologicas', '#conhecimento-cultura', '#banco-de-ideias'],
+    suggestedStyle: 'Boom Bap',
+    suggestedTrainingType: 'ideologica',
+    skills: ['flow', 'contagem_versos', 'punchline'],
+  },
+  {
+    id: 'mestre_gastacao',
+    name: 'Mestre da Gastação',
+    badge: '🟢',
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-950/40',
+    borderColor: 'border-emerald-500/50',
+    description: 'Humor, trocadilhos cômicos, tiradas irônicas e improviso descontraído.',
+    unlockedCategories: ['Gastação', 'Punchlines', 'Humor & Rima'],
+    unlockedChannels: ['#gastacao-e-tiradas', '#trocadilhos-comicos', '#freestyle-zoeira'],
+    suggestedStyle: 'Detroit',
+    suggestedTrainingType: 'gastacao',
+    skills: ['punchline', 'flow'],
+  },
+  {
+    id: 'hitmaker_trapstar',
+    name: 'Hitmaker / Trapstar',
+    badge: '🔥',
+    color: 'text-purple-400',
+    bgColor: 'bg-purple-950/40',
+    borderColor: 'border-purple-500/50',
+    description: 'Composição de hits, autotune/melódico, refrões chiclete e trap moderno.',
+    unlockedCategories: ['Trap & 808', 'Detroit', 'Composição'],
+    unlockedChannels: ['#composicao-trap', '#refroes-virais', '#plug-e-hype'],
+    suggestedStyle: 'Trap',
+    suggestedTrainingType: 'gastacao',
+    skills: ['encaixe_beat', 'flow'],
+  },
+  {
+    id: 'beatmaker_produtor',
+    name: 'Beatmaker & Produtor',
+    badge: '🎧',
+    color: 'text-indigo-400',
+    bgColor: 'bg-indigo-950/40',
+    borderColor: 'border-indigo-500/50',
+    description: 'Metrônomo, contagem de compassos 4/4, sintetizadores e mixagem.',
+    unlockedCategories: ['Encaixe no Beat', 'Fundamentos', 'Beats & Métrica'],
+    unlockedChannels: ['#sala-beatmaker', '#comandos-de-beat', '#troca-de-samples'],
+    suggestedStyle: 'Boom Bap',
+    suggestedTrainingType: 'conhecimento',
+    skills: ['encaixe_beat', 'contagem_versos'],
+  },
+  {
+    id: 'iniciante_aprendiz',
+    name: 'Freestyler Aprendiz',
+    badge: '🎤',
+    color: 'text-zinc-300',
+    bgColor: 'bg-zinc-900',
+    borderColor: 'border-zinc-700',
+    description: 'Começando do zero: primeiras rimas, rimas ricas e perda da timidez.',
+    unlockedCategories: ['Fundamentos', 'Contagem de Versos', 'Primeiras Rimas'],
+    unlockedChannels: ['#iniciantes-treino', '#primeiras-rimas', '#dicas-dos-mestres'],
+    suggestedStyle: 'Boom Bap',
+    suggestedTrainingType: 'conhecimento',
+    skills: ['encaixe_beat', 'contagem_versos', 'flow'],
+  },
+];
 
 interface OnboardingLandingProps {
   onEnterApp: (customProfile?: Partial<UserProfile>) => void;
@@ -45,10 +165,61 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
   const [mcAge, setMcAge] = useState<number | string>(18);
   const [trainingType, setTrainingType] = useState<BattleTrainingType>('gastacao');
   const [selectedStyle, setSelectedStyle] = useState('Detroit');
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>(['mc_batalha_sangue', 'speed_flow_master']);
   const [focusSkills, setFocusSkills] = useState<SkillFocusType[]>(['speedflow', 'punchline', 'encaixe_beat', 'flow', 'contagem_versos']);
   const [experienceLevel, setExperienceLevel] = useState<'iniciante' | 'intermediario' | 'batalhador'>('intermediario');
   const [activeDemoTab, setActiveDemoTab] = useState<'beats' | 'ai_judge' | 'studio' | 'battles'>('beats');
   const [demoPlayingId, setDemoPlayingId] = useState<string | null>(null);
+
+  // Toggle role selection
+  const handleToggleRole = (role: DiscordRoleItem) => {
+    setSelectedRoleIds(prev => {
+      const exists = prev.includes(role.id);
+      let next: string[];
+      if (exists) {
+        // keep at least 1 role
+        if (prev.length === 1) return prev;
+        next = prev.filter(id => id !== role.id);
+      } else {
+        next = [...prev, role.id];
+      }
+
+      // Auto update suggested training type and style from active roles
+      const activeRoles = DISCORD_ROLES.filter(r => next.includes(r.id));
+      if (activeRoles.length > 0) {
+        const lastRole = activeRoles[activeRoles.length - 1];
+        setTrainingType(lastRole.suggestedTrainingType);
+        setSelectedStyle(lastRole.suggestedStyle);
+        
+        // merge skills
+        const mergedSkills = new Set<SkillFocusType>();
+        activeRoles.forEach(r => r.skills.forEach(s => mergedSkills.add(s)));
+        setFocusSkills(Array.from(mergedSkills));
+      }
+
+      return next;
+    });
+  };
+
+  // Derive unlocked categories and channels dynamically based on selected roles
+  const { unlockedCategories, unlockedChannels, roleNames } = useMemo(() => {
+    const categoriesSet = new Set<string>();
+    const channelsSet = new Set<string>();
+    const names: string[] = [];
+
+    const activeRoles = DISCORD_ROLES.filter(r => selectedRoleIds.includes(r.id));
+    activeRoles.forEach(role => {
+      names.push(`${role.badge} ${role.name}`);
+      role.unlockedCategories.forEach(c => categoriesSet.add(c));
+      role.unlockedChannels.forEach(ch => channelsSet.add(ch));
+    });
+
+    return {
+      unlockedCategories: Array.from(categoriesSet),
+      unlockedChannels: Array.from(channelsSet),
+      roleNames: names,
+    };
+  }, [selectedRoleIds]);
 
   const handleStartWithProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,13 +229,10 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
       trainingType,
       favoriteStyle: selectedStyle,
       focusSkills,
-      tagline: trainingType === 'gastacao' 
-        ? 'MC Focado em Gastação & Tiradas 🟢' 
-        : trainingType === 'ideologica' 
-        ? 'MC de Rima Ideológica & Visão ⚪️' 
-        : experienceLevel === 'batalhador' 
-        ? 'MC de Batalha Profissional' 
-        : 'Rimador em Evolução',
+      roles: roleNames,
+      selectedCategories: unlockedCategories,
+      unlockedChannels: unlockedChannels,
+      tagline: roleNames[0] || 'MC Rimador RimaLab',
       level: experienceLevel === 'batalhador' ? 3 : experienceLevel === 'intermediario' ? 2 : 1,
     });
   };
@@ -129,7 +297,18 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <button
               id="hero-enter-direct-btn"
-              onClick={() => onEnterApp()}
+              onClick={() => onEnterApp({
+                artisticName: mcName.trim() || 'MC Foco & Flow',
+                age: Number(mcAge) || 18,
+                trainingType,
+                favoriteStyle: selectedStyle,
+                focusSkills,
+                roles: roleNames,
+                selectedCategories: unlockedCategories,
+                unlockedChannels: unlockedChannels,
+                tagline: roleNames[0] || 'MC Rimador RimaLab',
+                level: experienceLevel === 'batalhador' ? 3 : experienceLevel === 'intermediario' ? 2 : 1,
+              })}
               className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 px-6 py-3.5 text-sm font-black text-neutral-950 shadow-xl shadow-amber-500/25 hover:scale-105 transition-all active:scale-95"
             >
               <Mic className="h-4 w-4 text-neutral-950" />
@@ -224,7 +403,7 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                 Personalize seu apelido de batalha e estilo preferido para calibrar a IA do estúdio.
               </p>
 
-              <form onSubmit={handleStartWithProfile} className="space-y-3.5">
+              <form onSubmit={handleStartWithProfile} className="space-y-4">
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1">
                     Vulgo / Nome Artístico de MC:
@@ -273,34 +452,88 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                   </div>
                 </div>
 
-                {/* Quer Treinar O Quê? (Gastação vs Ideológica) */}
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                    🎤 Quer treinar o quê?
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: 'gastacao', label: 'Gastação', icon: '🟢', desc: 'Humor & Tiradas Cômicas' },
-                      { id: 'ideologica', label: 'Ideológica', icon: '⚪️', desc: 'Visão & Argumentos de Rua' },
-                      { id: 'sangue', label: 'Sangue', icon: '🔴', desc: 'Ataque & Firmeza' },
-                      { id: 'conhecimento', label: 'Conhecimento', icon: '🧠', desc: 'Cultura & Vocabulário' },
-                    ].map((v) => (
-                      <button
-                        type="button"
-                        key={v.id}
-                        onClick={() => setTrainingType(v.id as any)}
-                        className={`flex flex-col items-start p-2 rounded-lg border transition-all ${
-                          trainingType === v.id
-                            ? 'bg-amber-500/20 text-white border-amber-500 shadow-sm'
-                            : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <div className="flex items-center gap-1.5 text-xs font-bold">
-                          <span>{v.icon}</span>
-                          <span>{v.label}</span>
-                        </div>
-                        <span className="text-[10px] text-neutral-500 mt-0.5">{v.desc}</span>
-                      </button>
+                {/* CARGOS DO DISCORD (Role-Based Onboarding) */}
+                <div className="pt-1">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-black uppercase tracking-wider text-amber-400">
+                      🎭 Escolha seus Cargos de MC (Estilo Discord):
+                    </label>
+                    <span className="text-[10px] text-neutral-400 font-semibold">
+                      {selectedRoleIds.length} selecionado{selectedRoleIds.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-400 mb-2">
+                    Clique nos cargos abaixo. Os canais, categorias de treino e desafios se adaptam automaticamente ao que você escolher:
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
+                    {DISCORD_ROLES.map((role) => {
+                      const isSelected = selectedRoleIds.includes(role.id);
+                      return (
+                        <button
+                          key={role.id}
+                          type="button"
+                          onClick={() => handleToggleRole(role)}
+                          className={`flex items-start gap-2.5 p-2 rounded-xl border text-left transition-all relative ${
+                            isSelected
+                              ? `${role.bgColor} ${role.borderColor} shadow-md`
+                              : 'bg-neutral-950/80 border-neutral-800/80 hover:border-neutral-700 opacity-75 hover:opacity-100'
+                          }`}
+                        >
+                          <span className="text-base leading-none mt-0.5">{role.badge}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className={`text-xs font-black truncate ${isSelected ? role.color : 'text-white'}`}>
+                                {role.name}
+                              </span>
+                              {isSelected && (
+                                <span className="h-4 w-4 rounded-full bg-amber-500 text-neutral-950 flex items-center justify-center text-[10px] font-black shrink-0">
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-neutral-400 line-clamp-1 mt-0.5">
+                              {role.description}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Live Dynamic Discord Channels & Categories Preview */}
+                <div className="p-2.5 rounded-xl border border-neutral-800 bg-neutral-950/90 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-neutral-400 tracking-wider flex items-center gap-1.5">
+                      <Hash className="h-3.5 w-3.5 text-[#5865F2]" />
+                      Canais Desbloqueados por seus Cargos:
+                    </span>
+                    <span className="text-[10px] text-[#5865F2] font-bold">
+                      {unlockedChannels.length} canais
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1">
+                    {unlockedChannels.map((ch) => (
+                      <span key={ch} className="inline-flex items-center gap-1 rounded-md bg-[#2b2d31] px-1.5 py-0.5 text-[10px] font-medium text-neutral-300 border border-neutral-700/50">
+                        <span className="text-[#5865F2]">#</span>
+                        {ch.replace('#', '')}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase text-neutral-400 tracking-wider flex items-center gap-1.5">
+                      <Layers className="h-3.5 w-3.5 text-amber-400" />
+                      Categorias de Aulas & Beats Ativas:
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {unlockedCategories.map((cat) => (
+                      <span key={cat} className="rounded-md bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                        {cat}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -308,7 +541,7 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                 {/* Treinar em Qual Beat */}
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                    🎹 Treinar em qual beat?
+                    🎹 Beat Padrão Inicial:
                   </label>
                   <div className="grid grid-cols-3 gap-1.5">
                     {['Detroit', 'Trap', 'Boom Bap', 'Drill', 'Grime', 'Speed Flow'].map((st) => (
@@ -316,7 +549,7 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                         type="button"
                         key={st}
                         onClick={() => setSelectedStyle(st)}
-                        className={`rounded-lg py-2 px-2 text-[11px] font-bold border transition-all ${
+                        className={`rounded-lg py-1.5 px-2 text-[11px] font-bold border transition-all ${
                           selectedStyle === st
                             ? 'bg-amber-500 text-neutral-950 border-amber-500 shadow font-black'
                             : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
@@ -328,51 +561,12 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                   </div>
                 </div>
 
-                {/* Habilidades Técnicas */}
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                    ⚡ Foco Técnico (Speedflow, Punchline, Flow, etc):
-                  </label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {[
-                      { id: 'speedflow' as SkillFocusType, label: '⚡ Speedflow' },
-                      { id: 'punchline' as SkillFocusType, label: '🥊 Punchline' },
-                      { id: 'encaixe_beat' as SkillFocusType, label: '🎯 Encaixar no Beat' },
-                      { id: 'flow' as SkillFocusType, label: '🌊 Variação de Flow' },
-                      { id: 'contagem_versos' as SkillFocusType, label: '📐 Contagem de Versos' },
-                    ].map((skill) => {
-                      const isChecked = focusSkills.includes(skill.id);
-                      return (
-                        <button
-                          key={skill.id}
-                          type="button"
-                          onClick={() => {
-                            if (isChecked) {
-                              setFocusSkills(focusSkills.filter(s => s !== skill.id));
-                            } else {
-                              setFocusSkills([...focusSkills, skill.id]);
-                            }
-                          }}
-                          className={`flex items-center justify-between p-1.5 rounded-lg border text-[11px] font-bold transition-all ${
-                            isChecked
-                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/60'
-                              : 'bg-neutral-950 text-neutral-400 border-neutral-800'
-                          }`}
-                        >
-                          <span>{skill.label}</span>
-                          {isChecked && <span className="text-[10px] text-amber-400">✓</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
                 <button
                   type="submit"
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-95 transition-all mt-2"
                 >
                   <Zap className="h-4 w-4" />
-                  <span>Entrar com este Perfil & Rimar</span>
+                  <span>Entrar com Meus Cargos & Rimar</span>
                 </button>
               </form>
             </div>

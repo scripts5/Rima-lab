@@ -865,12 +865,45 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500 text-neutral-950 font-black text-xs">
                   RL
                 </div>
-                <span className="font-bold text-xs text-white">Cypher Brasil • Discord</span>
+                <div>
+                  <span className="font-bold text-xs text-white block">Cypher Brasil • Discord</span>
+                  <span className="text-[9px] text-[#5865F2] font-semibold">Cargos & Salas Exclusivas</span>
+                </div>
               </div>
               <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
                 ● 142 MCs
               </span>
             </div>
+
+            {/* User Selected Discord Roles Badges */}
+            {profile?.roles && profile.roles.length > 0 && (
+              <div className="mb-2.5 pb-2 border-b border-neutral-700/60">
+                <div className="text-[9px] font-black uppercase tracking-wider text-neutral-400 mb-1 px-1">
+                  Seus Cargos no Servidor ({profile.roles.length}):
+                </div>
+                <div className="flex flex-wrap gap-1 px-1">
+                  {profile.roles.map((roleId) => {
+                    const roleNames: Record<string, { label: string; color: string }> = {
+                      mc_freestyle: { label: '🎤 MC Freestyle', color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
+                      produtor: { label: '🎧 Beatmaker', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' },
+                      jurado: { label: '👑 Jurado Oficial', color: 'bg-rose-500/20 text-rose-300 border-rose-500/40' },
+                      iniciante: { label: '🌱 Aluno RimaLab', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
+                      speed_demon: { label: '⚡ Speed Flow', color: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' },
+                      cypher_organizer: { label: '🔥 Host de Batalha', color: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+                    };
+                    const r = roleNames[roleId] || { label: `#${roleId}`, color: 'bg-neutral-800 text-neutral-300 border-neutral-700' };
+                    return (
+                      <span
+                        key={roleId}
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${r.color}`}
+                      >
+                        {r.label}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Channels List */}
             <div className="space-y-1 text-xs">

@@ -6,6 +6,7 @@ import {
   MicOff, 
   Sliders, 
   Volume2, 
+  VolumeX,
   Sparkles, 
   RotateCcw, 
   CheckCircle2, 
@@ -27,12 +28,15 @@ import {
   SlidersHorizontal,
   Wand2,
   Share2,
-  RefreshCw
+  RefreshCw,
+  Headphones,
+  Bot
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Beat, RhymeAnalysis, UserProfile, BattleTrainingType, SkillFocusType } from '../types';
 import { PRESET_BEATS, globalBeatEngine } from '../lib/audio/beatEngine';
 import { SpeechHandler } from '../lib/speech/speechRecognition';
+import { aiVoiceTutor } from '../lib/speech/aiVoiceTutor';
 
 interface FreestyleStudioProps {
   profile: UserProfile | null;
@@ -104,6 +108,10 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
   const [lastSpokenWord, setLastSpokenWord] = useState<string>('');
   const [lastAudioBlob, setLastAudioBlob] = useState<Blob | null>(null);
 
+  // AI Voice Coach (Modo GPT Voz ao Vivo)
+  const [autoVoiceCoach, setAutoVoiceCoach] = useState<boolean>(true);
+  const [isVoiceSpeaking, setIsVoiceSpeaking] = useState<boolean>(false);
+
   // Camera & Visual Stage State
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -160,6 +168,7 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
       handler.stopListening();
       globalBeatEngine.setOnStepCallback(null);
       stopCamera();
+      aiVoiceTutor.stop();
       if (sessionTimerRef.current) {
         window.clearInterval(sessionTimerRef.current);
       }
@@ -504,12 +513,38 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
           analysis: data.analysis,
           xpEarned,
         });
+
+        // Professor Rima Voice Feedback (Spoken Live like GPT Voice)
+        if (autoVoiceCoach) {
+          speakAnalysisAudio(data.analysis);
+        }
       }
     } catch (err) {
       console.error('Error analyzing rhymes:', err);
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const speakAnalysisAudio = (analysis: RhymeAnalysis) => {
+    aiVoiceTutor.speakEvaluationCommentary(
+      profile?.artisticName || 'MC',
+      analysis.overallScore,
+      analysis.evaluationVerdict || 'Sólido',
+      analysis.directFeedback || analysis.aiCommentary || 'Mandou bem no improviso!',
+      analysis.strengths?.[0],
+      analysis.improvements?.[0],
+      {
+        onStart: () => setIsVoiceSpeaking(true),
+        onEnd: () => setIsVoiceSpeaking(false),
+        onError: () => setIsVoiceSpeaking(false),
+      }
+    );
+  };
+
+  const handleStopVoiceCoach = () => {
+    aiVoiceTutor.stop();
+    setIsVoiceSpeaking(false);
   };
 
   // Sample verses injection for quick testing
@@ -1527,6 +1562,63 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
                       +{Math.round(analysisResult.overallScore * 2.5)} XP
                     </p>
                   </div>
+                </div>
+              </div>
+
+              {/* Professor Rima AI Voice Feedback Player (Modo GPT Voz ao Vivo) */}
+              <div className="rounded-xl border border-indigo-500/40 bg-indigo-950/30 p-3 flex flex-wrap items-center justify-between gap-3 shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                    isVoiceSpeaking ? 'bg-indigo-500 text-white animate-pulse' : 'bg-neutral-800 text-indigo-300'
+                  }`}>
+                    <Bot className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-white">Professor IA Falando</span>
+                      {isVoiceSpeaking ? (
+                        <span className="flex items-center gap-1 rounded-full bg-emerald-500/20 px-1.5 py-0.2 text-[9px] font-black text-emerald-400 border border-emerald-500/30">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                          AO VIVO
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-neutral-400 font-medium">Modo GPT Voz</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-neutral-300">
+                      {isVoiceSpeaking ? 'Explicando pontos fortes e correções da sua rima...' : 'Ouça a análise completa narrada com ritmo de rap.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {isVoiceSpeaking ? (
+                    <button
+                      onClick={handleStopVoiceCoach}
+                      className="flex items-center gap-1.5 rounded-lg bg-rose-500/20 border border-rose-500/40 px-2.5 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-500/30 transition-colors"
+                    >
+                      <VolumeX className="h-3.5 w-3.5" />
+                      <span>Parar Voz</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => speakAnalysisAudio(analysisResult)}
+                      className="flex items-center gap-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 px-3 py-1.5 text-xs font-black text-white shadow transition-all active:scale-95"
+                    >
+                      <Volume2 className="h-3.5 w-3.5" />
+                      <span>Ouvir Professor Rima</span>
+                    </button>
+                  )}
+
+                  <label className="flex items-center gap-1.5 text-[11px] text-neutral-400 cursor-pointer ml-1">
+                    <input
+                      type="checkbox"
+                      checked={autoVoiceCoach}
+                      onChange={(e) => setAutoVoiceCoach(e.target.checked)}
+                      className="rounded accent-indigo-500 h-3.5 w-3.5"
+                    />
+                    <span>Voz Automática</span>
+                  </label>
                 </div>
               </div>
 

@@ -66,6 +66,7 @@ import {
   SkillFocusType,
   BattleTrainingType
 } from './types';
+import { NavigationProvider, NavTabId } from './context/NavigationContext';
 import { PRESET_BEATS, globalBeatEngine } from './lib/audio/beatEngine';
 import { LESSONS_DATA } from './data/lessons';
 import { CHALLENGES_DATA } from './data/challenges';
@@ -84,9 +85,34 @@ import {
 export function App() {
   const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'calls' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'suggestions' | 'tracks'>('onboarding');
   const [initialSkillTab, setInitialSkillTab] = useState<string | undefined>(undefined);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Punchlines');
   
   // Data States
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('rimalab_user_profile') : null;
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      id: 'user_default',
+      userId: 'user_default',
+      artisticName: 'MC Visitante',
+      tagline: '⚔️ MC de Batalha (Sangue)',
+      bio: 'Treinando freestyle e speed flow no RimaLab.',
+      favoriteStyle: 'Detroit',
+      age: 18,
+      trainingType: 'gastacao',
+      focusSkills: ['speedflow', 'punchline', 'encaixe_beat', 'flow', 'contagem_versos'],
+      roles: ['⚔️ MC de Batalha (Sangue)', '⚡ Speed Flow Master'],
+      selectedCategories: ['Punchlines', 'Speed Flow', 'Batalhas & Improviso', 'Métrica & Flow', 'Drill'],
+      unlockedChannels: ['#batalha-sangue', '#speedflow-treino', '#arena-versus', '#cypher-ao-vivo'],
+      level: 1,
+      totalXP: 150,
+      streakDays: 1,
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      isPublic: true,
+    };
+  });
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [lessons, setLessons] = useState<Lesson[]>(LESSONS_DATA);
   const [challenges, setChallenges] = useState<Challenge[]>(CHALLENGES_DATA);
@@ -128,6 +154,7 @@ export function App() {
   const [isPromptGenOpen, setIsPromptGenOpen] = useState<boolean>(false);
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
   const [isGmailAuthOpen, setIsGmailAuthOpen] = useState<boolean>(false);
+  const [isVoiceCoachOpen, setIsVoiceCoachOpen] = useState<boolean>(false);
   const [isLiveBannerDismissed, setIsLiveBannerDismissed] = useState<boolean>(false);
 
   // Auto show banner again if URL or active status changes
@@ -588,40 +615,77 @@ export function App() {
     showToast('🎯 Assuntos Atualizados!', `Sua trilha agora foca em ${skills.length} assuntos selecionados.`, 'xp');
   };
 
-  return (
-    <div className="min-h-screen bg-[#0a0a0c] text-neutral-100 font-sans selection:bg-amber-500 selection:text-neutral-950 flex flex-col">
-      
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-neutral-900/95 p-4 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-5 duration-300">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-neutral-950 font-black">
-            {toastMessage.type === 'ach' ? '🏆' : '⚡'}
-          </div>
-          <div>
-            <h4 className="text-xs font-bold text-white">{toastMessage.title}</h4>
-            <p className="text-xs text-neutral-300">{toastMessage.desc}</p>
-          </div>
-        </div>
-      )}
+  // Handler: Select Category from Top Header Bar
+  const handleSelectCategory = (catName: string) => {
+    setSelectedCategory(catName);
+    const lower = catName.toLowerCase();
+    
+    // Map category to skill track ID
+    let mappedSkill: string = 'punchline';
+    if (lower.includes('speed') || lower.includes('double')) mappedSkill = 'speedflow';
+    else if (lower.includes('punchline') || lower.includes('batalha') || lower.includes('sangue')) mappedSkill = 'punchline';
+    else if (lower.includes('encaixe') || lower.includes('beat')) mappedSkill = 'encaixe_beat';
+    else if (lower.includes('contagem') || lower.includes('métrica') || lower.includes('4/4')) mappedSkill = 'contagem_versos';
+    else if (lower.includes('flow') || lower.includes('trap') || lower.includes('detroit')) mappedSkill = 'flow';
+    else if (lower.includes('gasta') || lower.includes('humor')) mappedSkill = 'gastacao';
+    else if (lower.includes('ideol') || lower.includes('poesia') || lower.includes('fundamento')) mappedSkill = 'ideologica';
 
-      {/* Main Header */}
-      <Header
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        profile={profile}
-        subscription={subscription}
-        liveCall={liveCall}
-        onOpenSubscription={() => setIsSubscriptionOpen(true)}
-        onOpenPromptGen={() => setIsPromptGenOpen(true)}
-        onOpenAdmin={() => setIsAdminOpen(true)}
-        onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
-        isPlayingBeat={isPlayingBeat}
-        onToggleBeat={() => {
-          const playing = globalBeatEngine.togglePlay();
-          setIsPlayingBeat(playing);
-        }}
-        currentBeatTitle={currentBeat.title}
-      />
+    setInitialSkillTab(mappedSkill);
+    setActiveTab('tracks');
+    showToast(
+      `🎯 Categoria: ${catName}`,
+      `Trilha do seu cargo carregada com sucesso.`,
+      'xp'
+    );
+  };
+
+  return (
+    <NavigationProvider
+      profile={profile}
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      selectedCategory={selectedCategory}
+      setSelectedCategory={setSelectedCategory}
+      onSelectSkillTrack={(skillId) => {
+        setInitialSkillTab(skillId);
+      }}
+    >
+      <div className="min-h-screen bg-[#0a0a0c] text-neutral-100 font-sans selection:bg-amber-500 selection:text-neutral-950 flex flex-col">
+        
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-neutral-900/95 p-4 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-5 duration-300">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-neutral-950 font-black">
+              {toastMessage.type === 'ach' ? '🏆' : '⚡'}
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-white">{toastMessage.title}</h4>
+              <p className="text-xs text-neutral-300">{toastMessage.desc}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Main Header */}
+        <Header
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          profile={profile}
+          subscription={subscription}
+          liveCall={liveCall}
+          onOpenSubscription={() => setIsSubscriptionOpen(true)}
+          onOpenPromptGen={() => setIsPromptGenOpen(true)}
+          onOpenAdmin={() => setIsAdminOpen(true)}
+          onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
+          onOpenVoiceCoach={() => setIsVoiceCoachOpen(true)}
+          onSelectCategory={handleSelectCategory}
+          selectedCategory={selectedCategory}
+          isPlayingBeat={isPlayingBeat}
+          onToggleBeat={() => {
+            const playing = globalBeatEngine.togglePlay();
+            setIsPlayingBeat(playing);
+          }}
+          currentBeatTitle={currentBeat.title}
+        />
 
       {/* Global Real-Time Live Call Broadcast Banner (When Teacher is Live on Discord / Meet) */}
       {liveCall?.isActive && liveCall.url && !isLiveBannerDismissed && (
@@ -679,10 +743,31 @@ export function App() {
         {activeTab === 'onboarding' && (
           <OnboardingLanding
             onEnterApp={(customProfile) => {
-              if (customProfile && profile) {
-                setProfile({ ...profile, ...customProfile });
+              if (customProfile) {
+                const updated: UserProfile = profile 
+                  ? { ...profile, ...customProfile } 
+                  : {
+                      id: 'user_default',
+                      userId: 'user_default',
+                      bio: 'Treinando freestyle no RimaLab.',
+                      level: 1,
+                      totalXP: 150,
+                      streakDays: 1,
+                      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+                      isPublic: true,
+                      ...(customProfile as UserProfile)
+                    };
+                setProfile(updated);
+                if (customProfile.selectedCategories && customProfile.selectedCategories.length > 0) {
+                  setSelectedCategory(customProfile.selectedCategories[0]);
+                }
+                try {
+                  localStorage.setItem('rimalab_user_profile', JSON.stringify(updated));
+                } catch {}
+                saveUserProfileToFirestore(updated);
               }
-              setActiveTab('studio');
+              setActiveTab('tracks');
+              showToast('🎭 Cargo e Categorias Atualizados!', 'A barra superior agora reflete suas escolhas de treino.', 'ach');
             }}
             onSelectBeatAndStart={(selectedBeat) => {
               setCurrentBeat(selectedBeat);
@@ -746,6 +831,7 @@ export function App() {
             onOpenAdmin={() => setIsAdminOpen(true)}
             onOpenSubscription={() => setIsSubscriptionOpen(true)}
             onOpenStudio={() => setActiveTab('studio')}
+            onOpenVoiceCoach={() => setIsVoiceCoachOpen(true)}
             isPlayingBeat={isPlayingBeat}
             onToggleBeat={() => {
               const playing = globalBeatEngine.togglePlay();
@@ -870,6 +956,7 @@ export function App() {
       <AdminPanelModal
         isOpen={isAdminOpen}
         onClose={() => setIsAdminOpen(false)}
+        profile={profile}
         currentLiveCall={liveCall}
         onUpdateLiveCall={handleUpdateLiveCall}
         onShowToast={showToast}
@@ -881,6 +968,22 @@ export function App() {
         onClose={() => setIsGmailAuthOpen(false)}
         onLoginSuccess={handleGmailLoginSuccess}
         onShowToast={showToast}
+      />
+
+      <AIVoiceProfessorModal
+        isOpen={isVoiceCoachOpen}
+        onClose={() => setIsVoiceCoachOpen(false)}
+        profile={profile}
+        subscription={subscription}
+        onShowToast={showToast}
+        onGainXP={(amount, reason) => {
+          if (profile) {
+            const updatedProf = { ...profile, totalXP: profile.totalXP + amount };
+            setProfile(updatedProf);
+            saveUserProfileToFirestore(updatedProf).catch(e => console.warn('Firestore profile sync error:', e));
+          }
+          showToast(`⚡ +${amount} XP`, reason, 'xp');
+        }}
       />
 
       {/* Footer */}
@@ -905,7 +1008,8 @@ export function App() {
         </div>
       </footer>
 
-    </div>
+      </div>
+    </NavigationProvider>
   );
 }
 

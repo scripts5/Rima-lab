@@ -49,6 +49,9 @@ export interface UserProfile {
   age?: number | string;
   trainingType?: BattleTrainingType;
   focusSkills?: SkillFocusType[];
+  roles?: string[];
+  selectedCategories?: string[];
+  unlockedChannels?: string[];
   level: number;
   totalXP: number;
   streakDays: number;
