@@ -615,6 +615,29 @@ export function App() {
     showToast('🎯 Assuntos Atualizados!', `Sua trilha agora foca em ${skills.length} assuntos selecionados.`, 'xp');
   };
 
+  // Handler: Add Custom XP (Mentorship check-in, challenges, bonuses)
+  const handleAddXP = (amount: number, reason: string) => {
+    if (profile) {
+      const newXP = profile.totalXP + amount;
+      const updatedProf: UserProfile = {
+        ...profile,
+        totalXP: newXP,
+      };
+      setProfile(updatedProf);
+      saveUserProfileToFirestore(updatedProf).catch(e => console.warn('Firestore profile sync error:', e));
+      try {
+        localStorage.setItem('rimalab_user_profile', JSON.stringify(updatedProf));
+      } catch {}
+      showToast('⚡ XP Creditado!', `+${amount} XP por ${reason}!`, 'xp');
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.7 },
+        colors: ['#10b981', '#f59e0b', '#8b5cf6'],
+      });
+    }
+  };
+
   // Handler: Select Category from Top Header Bar
   const handleSelectCategory = (catName: string) => {
     setSelectedCategory(catName);
@@ -843,6 +866,7 @@ export function App() {
               globalBeatEngine.setBeat(selectedBeat);
             }}
             onShowToast={showToast}
+            onAddXP={handleAddXP}
           />
         )}
 

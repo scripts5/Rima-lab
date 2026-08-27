@@ -170,14 +170,14 @@ export const Header: React.FC<HeaderProps> = ({
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-display text-lg font-extrabold tracking-tight text-white">
-                  Rima<span className="text-amber-500">Lab</span>
+                  Academia de <span className="text-amber-500">Rimas</span>
                 </span>
                 <span className="rounded bg-[#5865F2]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#8ea1e1] border border-[#5865F2]/40">
                   Discord Server
                 </span>
               </div>
               <p className="hidden text-[10px] text-amber-400/90 font-medium sm:block">
-                Por Luquita MC & Kowalski MC
+                Por Kowalski MC & Luquita MC
               </p>
             </div>
           </button>

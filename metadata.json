@@ -1,6 +1,6 @@
 {
-  "name": "RimaLab",
-  "description": "Plataforma SaaS de treinamento de rimas e freestyle com IA, reconhecimento de voz e gamificação.",
+  "name": "Academia de Rimas",
+  "description": "Plataforma de treinamento de freestyle, rimas, métrica e batalhas ao vivo com IA e mentorias dos professores Kowalski MC & Luquita MC.",
   "requestFramePermissions": [
     "microphone",
     "camera"

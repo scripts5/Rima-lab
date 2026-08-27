@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Video, 
   Radio, 
@@ -27,10 +27,18 @@ import {
   Search,
   CheckCircle2,
   Share2,
-  VolumeX
+  VolumeX,
+  Bell,
+  BellOff,
+  RotateCcw,
+  SkipForward,
+  Shuffle,
+  Lightbulb,
+  CheckCircle
 } from 'lucide-react';
 import { LiveCallSession, UserProfile, Subscription, Beat } from '../types';
 import { PRESET_BEATS, globalBeatEngine } from '../lib/audio/beatEngine';
+import { FREESTYLE_WORDS, FreestyleWordItem, MentorshipCheckin } from '../data/freestyleTopics';
 
 interface LiveCallRoomProps {
   liveCall: LiveCallSession | null;
@@ -45,6 +53,7 @@ interface LiveCallRoomProps {
   currentBeat: Beat;
   onSelectBeat: (beat: Beat) => void;
   onShowToast: (title: string, desc: string, type?: 'xp' | 'ach' | 'info') => void;
+  onAddXP?: (amount: number, reason: string) => void;
 }
 
 export interface DiscordVoiceChannel {
@@ -299,6 +308,7 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
   currentBeat,
   onSelectBeat,
   onShowToast,
+  onAddXP,
 }) => {
   const [copied, setCopied] = useState(false);
   const [copiedInvite, setCopiedInvite] = useState(false);
@@ -307,6 +317,15 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
   const [showDiscordWidgetEmbed, setShowDiscordWidgetEmbed] = useState(false);
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Audio alerts settings
+  const [audioAlertsEnabled, setAudioAlertsEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('rimalab_audio_alerts') !== 'false';
+    } catch {
+      return true;
+    }
+  });
 
   // Discord Server 1522381290001928242 live status
   const [discordStatus, setDiscordStatus] = useState<DiscordServerStatus>({
@@ -320,12 +339,90 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
     onlineMembers: [],
   });
 
+  const previousOccupantsRef = useRef<number>(0);
+
+  // Sound synthesis for alerts
+  const playAlertChime = (type: 'call_start' | 'turn_switch' | 'beat_tick' = 'call_start') => {
+    if (!audioAlertsEnabled) return;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+
+      if (type === 'call_start') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523.25, now); // C5
+        osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.15); // G5
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.4);
+      } else if (type === 'turn_switch') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(440, now); // A4
+        osc.frequency.setValueAtTime(880, now + 0.08); // A5
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      } else if (type === 'beat_tick') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1000, now);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      }
+    } catch {}
+  };
+
+  const toggleAudioAlerts = () => {
+    const next = !audioAlertsEnabled;
+    setAudioAlertsEnabled(next);
+    try {
+      localStorage.setItem('rimalab_audio_alerts', String(next));
+    } catch {}
+    if (next) {
+      playAlertChime('call_start');
+      onShowToast('🔔 Alertas Sonoros Ativados', 'Você ouvirá um sinal quando novas chamadas forem iniciadas.', 'info');
+    } else {
+      onShowToast('🔕 Alertas Sonoros Silenciados', 'Notificações de áudio desativadas.', 'info');
+    }
+  };
+
   const fetchDiscordServerStatus = async () => {
     setIsRefreshingDiscord(true);
     try {
       const res = await fetch('/api/discord/server');
       if (res.ok) {
         const data = await res.json();
+        const nextChannels = (data.voiceChannels && data.voiceChannels.length > 0) ? data.voiceChannels : DEFAULT_CHANNELS;
+        const currentOccupants = nextChannels.reduce((sum: number, ch: DiscordVoiceChannel) => sum + (ch.userCount || 0), 0);
+
+        // Check if new people joined
+        if (currentOccupants > previousOccupantsRef.current && previousOccupantsRef.current !== 0) {
+          playAlertChime('call_start');
+          onShowToast(
+            '🔥 Novos MCs na Call!',
+            `A contagem de participantes aumentou para ${currentOccupants} pessoas no servidor.`,
+            'ach'
+          );
+        }
+        previousOccupantsRef.current = currentOccupants;
+
         setDiscordStatus(prev => ({
           ...prev,
           guildId: data.guildId || prev.guildId,
@@ -334,7 +431,7 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
           widgetUrl: data.widgetUrl || prev.widgetUrl,
           presenceCount: typeof data.presenceCount === 'number' ? data.presenceCount : 0,
           isLiveCallActive: Boolean(data.isLiveCallActive),
-          voiceChannels: (data.voiceChannels && data.voiceChannels.length > 0) ? data.voiceChannels : DEFAULT_CHANNELS,
+          voiceChannels: nextChannels,
           onlineMembers: data.onlineMembers || [],
         }));
       }
@@ -355,7 +452,6 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
   const rawUrl = (liveCall?.url || 'https://discord.gg/7s4Tdd9bz').trim();
   const currentUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
   const inviteUrl = discordStatus.instantInvite || 'https://discord.gg/7s4Tdd9bz';
-  const platform = liveCall?.platform || 'discord';
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(currentUrl);
@@ -378,29 +474,200 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
 
   // Total people in calls calculation (actual detection)
   const totalOccupants = discordStatus.voiceChannels.reduce((sum, ch) => sum + (ch.userCount || 0), 0);
+  const occupiedChannelsCount = discordStatus.voiceChannels.filter((ch) => (ch.userCount || 0) > 0 || (ch.users && ch.users.length > 0)).length;
 
-  // Filter channels
-  const filteredChannels = discordStatus.voiceChannels.filter((ch) => {
-    const matchesCategory = activeCategoryFilter === 'all' || ch.category === activeCategoryFilter;
-    const matchesSearch = !searchQuery || 
-      ch.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      (ch.topic && ch.topic.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (ch.category && ch.category.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCategory && matchesSearch;
-  });
+  // Filter and auto-sort channels (moving occupied channels to the top)
+  const filteredChannels = discordStatus.voiceChannels
+    .filter((ch) => {
+      if (activeCategoryFilter === 'occupied_only') {
+        return (ch.userCount || 0) > 0 || (ch.users && ch.users.length > 0);
+      }
+      const matchesCategory = activeCategoryFilter === 'all' || ch.category === activeCategoryFilter;
+      const matchesSearch = !searchQuery || 
+        ch.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        (ch.topic && ch.topic.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (ch.category && ch.category.toLowerCase().includes(searchQuery.toLowerCase()));
+      return matchesCategory && matchesSearch;
+    })
+    .sort((a, b) => {
+      const aUsers = (a.userCount || 0) || (a.users ? a.users.length : 0);
+      const bUsers = (b.userCount || 0) || (b.users ? b.users.length : 0);
+      if (aUsers !== bUsers) {
+        return bUsers - aUsers;
+      }
+      if (a.isActiveCall && !b.isActiveCall) return -1;
+      if (!a.isActiveCall && b.isActiveCall) return 1;
+      return 0;
+    });
 
   const categories = [
     { id: 'all', label: 'Todas as Calls', count: discordStatus.voiceChannels.length },
+    ...(occupiedChannelsCount > 0 ? [{ id: 'occupied_only', label: '🔥 Calls com Gente', count: occupiedChannelsCount }] : []),
     { id: '🔊 Salas de Prática', label: '🔊 Salas de Prática', count: discordStatus.voiceChannels.filter(c => c.category === '🔊 Salas de Prática').length },
     { id: '🎤 Call Aulas - Iniciante', label: '🎤 Iniciante', count: discordStatus.voiceChannels.filter(c => c.category === '🎤 Call Aulas - Iniciante').length },
     { id: '🎤 Call Aulas - Intermediário', label: '🎤 Intermediário', count: discordStatus.voiceChannels.filter(c => c.category === '🎤 Call Aulas - Intermediário').length },
     { id: '🎤 Call Aulas - Avançado', label: '🎤 Avançado', count: discordStatus.voiceChannels.filter(c => c.category === '🎤 Call Aulas - Avançado').length },
   ];
 
+  /* -------------------------------------------------------------
+     FEATURE 1: MODO DUELO 1V1 COM TIMER & METRÔNOMO DE 4 COMPASSOS
+  ------------------------------------------------------------- */
+  const [isBattleRunning, setIsBattleRunning] = useState(false);
+  const [battleFormat, setBattleFormat] = useState<'4_bars' | '8_bars' | '2_bars'>('4_bars');
+  const [currentMC, setCurrentMC] = useState<'MC 1 (Ataque)' | 'MC 2 (Resposta)'>('MC 1 (Ataque)');
+  const [mc1Name, setMc1Name] = useState('Você / MC 1');
+  const [mc2Name, setMc2Name] = useState('Adversário / Professor');
+  const [currentBar, setCurrentBar] = useState(1); // 1..4 (or 1..8)
+  const [currentBeatStep, setCurrentBeatStep] = useState(1); // 1..4
+  const [currentRound, setCurrentRound] = useState(1);
+  const [battleSoundEnabled, setBattleSoundEnabled] = useState(true);
+
+  const maxBars = battleFormat === '8_bars' ? 8 : battleFormat === '2_bars' ? 2 : 4;
+  const battleBpm = currentBeat?.bpm || 90;
+  const beatIntervalMs = (60 / battleBpm) * 1000;
+
+  useEffect(() => {
+    let timer: any = null;
+    if (isBattleRunning) {
+      timer = setInterval(() => {
+        setCurrentBeatStep(prevStep => {
+          if (prevStep >= 4) {
+            // New Bar
+            setCurrentBar(prevBar => {
+              if (prevBar >= maxBars) {
+                // Switch MC Turn!
+                playAlertChime('turn_switch');
+                setCurrentMC(prevMC => {
+                  const nextMC = prevMC === 'MC 1 (Ataque)' ? 'MC 2 (Resposta)' : 'MC 1 (Ataque)';
+                  if (nextMC === 'MC 1 (Ataque)') {
+                    setCurrentRound(r => r + 1);
+                  }
+                  return nextMC;
+                });
+                return 1;
+              }
+              return prevBar + 1;
+            });
+            return 1;
+          }
+          if (battleSoundEnabled) {
+            playAlertChime('beat_tick');
+          }
+          return prevStep + 1;
+        });
+      }, beatIntervalMs);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isBattleRunning, beatIntervalMs, maxBars, battleSoundEnabled]);
+
+  const handleStartBattle = () => {
+    setIsBattleRunning(true);
+    setCurrentBar(1);
+    setCurrentBeatStep(1);
+    playAlertChime('call_start');
+    if (!isPlayingBeat) {
+      onToggleBeat();
+    }
+  };
+
+  const handlePauseBattle = () => {
+    setIsBattleRunning(false);
+  };
+
+  const handleResetBattle = () => {
+    setIsBattleRunning(false);
+    setCurrentBar(1);
+    setCurrentBeatStep(1);
+    setCurrentMC('MC 1 (Ataque)');
+    setCurrentRound(1);
+  };
+
+  const handleSwitchMCTurn = () => {
+    playAlertChime('turn_switch');
+    setCurrentBar(1);
+    setCurrentBeatStep(1);
+    setCurrentMC(prev => prev === 'MC 1 (Ataque)' ? 'MC 2 (Resposta)' : 'MC 1 (Ataque)');
+  };
+
+  /* -------------------------------------------------------------
+     FEATURE 2: GERADOR DE PALAVRAS / TEMAS PARA FREESTYLE
+  ------------------------------------------------------------- */
+  const [wordCategory, setWordCategory] = useState<string>('all');
+  const [currentWordItem, setCurrentWordItem] = useState<FreestyleWordItem>(FREESTYLE_WORDS[0]);
+  const [wordHistory, setWordHistory] = useState<string[]>([FREESTYLE_WORDS[0].word]);
+  const [autoRotateSeconds, setAutoRotateSeconds] = useState<number>(0); // 0 = off, 10, 15, 30
+
+  const handleNextRandomWord = () => {
+    const available = wordCategory === 'all' 
+      ? FREESTYLE_WORDS 
+      : FREESTYLE_WORDS.filter(w => w.category === wordCategory);
+    const pool = available.length > 0 ? available : FREESTYLE_WORDS;
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    const selected = pool[randomIndex];
+    setCurrentWordItem(selected);
+    setWordHistory(prev => [selected.word, ...prev.slice(0, 4)]);
+  };
+
+  useEffect(() => {
+    let rotateTimer: any = null;
+    if (autoRotateSeconds > 0) {
+      rotateTimer = setInterval(handleNextRandomWord, autoRotateSeconds * 1000);
+    }
+    return () => {
+      if (rotateTimer) clearInterval(rotateTimer);
+    };
+  }, [autoRotateSeconds, wordCategory]);
+
+  /* -------------------------------------------------------------
+     FEATURE 3: CHECK-IN DE PRESENÇA NAS MENTORIAS & HISTÓRICO
+  ------------------------------------------------------------- */
+  const [checkins, setCheckins] = useState<MentorshipCheckin[]>(() => {
+    try {
+      const saved = localStorage.getItem('rimalab_mentorship_checkins');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const todayStr = new Date().toLocaleDateString('pt-BR');
+  const hasCheckedInToday = checkins.some(c => c.date === todayStr);
+
+  const handleCheckinMentorship = () => {
+    if (hasCheckedInToday) {
+      onShowToast('✅ Presença Já Confirmada', 'Você já registrou sua presença na aula de hoje!', 'info');
+      return;
+    }
+
+    const now = new Date();
+    const newCheckin: MentorshipCheckin = {
+      id: `checkin_${Date.now()}`,
+      date: todayStr,
+      time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      channelName: liveCall?.title || 'Mentoria Geral Discord',
+      host: liveCall?.hostName || 'Kowalski MC & Luquita MC',
+      xpEarned: 150,
+    };
+
+    const updated = [newCheckin, ...checkins];
+    setCheckins(updated);
+    try {
+      localStorage.setItem('rimalab_mentorship_checkins', JSON.stringify(updated));
+    } catch {}
+
+    if (onAddXP) {
+      onAddXP(150, 'Presença VIP na Mentoria ao Vivo');
+    } else {
+      onShowToast('🎉 Presença Confirmada!', '+150 XP creditados e medalha de Aluno VIP registrada!', 'xp');
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-8 animate-in fade-in duration-300">
       
-      {/* Header Banner */}
+      {/* Top Header Banner with Sound Alert and Refresh Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-800 pb-6">
         <div>
           <div className="flex items-center gap-2">
@@ -420,8 +687,8 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mt-1 flex items-center gap-2.5">
             <span>Chamadas de Voz & Aulas ao Vivo</span>
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
-              Discord
+            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
+              Academia de Rimas
             </span>
           </h1>
           <p className="text-sm text-neutral-400 mt-1 max-w-2xl">
@@ -430,7 +697,20 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            onClick={toggleAudioAlerts}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${
+              audioAlertsEnabled
+                ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 hover:bg-amber-500/20'
+                : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white'
+            }`}
+            title="Ativar/desativar alerta sonoro de novas calls"
+          >
+            {audioAlertsEnabled ? <Bell className="h-3.5 w-3.5 text-amber-400" /> : <BellOff className="h-3.5 w-3.5" />}
+            <span>{audioAlertsEnabled ? 'Alertas Ativos' : 'Alertas Mudos'}</span>
+          </button>
+
           <button
             onClick={fetchDiscordServerStatus}
             disabled={isRefreshingDiscord}
@@ -454,7 +734,7 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
         </div>
       </div>
 
-      {/* Official Discord Server Invite Card (CONVITE PARA ENTRAR NO SERVIDOR) */}
+      {/* Official Discord Server Card */}
       <div className="rounded-3xl border border-indigo-500/50 bg-gradient-to-r from-indigo-950/70 via-neutral-950 to-neutral-950 p-6 sm:p-7 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-[#5865F2]/10 rounded-full blur-3xl pointer-events-none" />
         
@@ -524,58 +804,309 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
         </div>
       </div>
 
-      {/* Live Call Broadcast Banner (when Professor starts a Live Class) */}
-      {isCallActive && liveCall && (
-        <div className="rounded-3xl border border-red-500/60 bg-gradient-to-r from-red-950/80 via-neutral-950 to-neutral-950 p-6 sm:p-7 shadow-2xl space-y-4 animate-in fade-in">
+      {/* NEW FEATURE 1 & 2: MODO DUELO 1V1 + GERADOR DE PALAVRAS INTERATIVO NA CALL */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* Left Column: 1v1 Battle Timer & 4-Bar Metronome (7 Cols) */}
+        <div className="lg:col-span-7 rounded-3xl border border-neutral-800 bg-neutral-950 p-6 sm:p-7 space-y-6 shadow-xl relative overflow-hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-1 rounded-full bg-red-600 text-white font-black text-xs animate-pulse flex items-center gap-1.5">
-                <Radio className="h-3.5 w-3.5" />
-                <span>AULA AO VIVO AGORA</span>
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/20 border border-red-500/40 text-red-400 font-bold">
+                <Swords className="h-4 w-4" />
               </span>
-              <span className="text-xs text-neutral-400 font-medium">
-                Host: <strong className="text-white">{liveCall.hostName || 'Kowalski MC & Luquita MC'}</strong>
-              </span>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                  <span>Modo Duelo 1v1 & Metrônomo 4 Compassos</span>
+                </h3>
+                <p className="text-xs text-neutral-400">Contador de métrica sincronizado para batalhas na call</p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
-                onClick={handleCopyLink}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-700 text-xs font-bold text-neutral-200 hover:border-neutral-500 transition-colors"
+                onClick={() => setBattleFormat('4_bars')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                  battleFormat === '4_bars' ? 'bg-amber-500 text-neutral-950 font-black' : 'bg-neutral-900 text-neutral-400 border border-neutral-800'
+                }`}
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-neutral-400" />}
-                <span>{copied ? 'Link Copiado' : 'Copiar Link'}</span>
+                4 Compassos
+              </button>
+              <button
+                onClick={() => setBattleFormat('8_bars')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                  battleFormat === '8_bars' ? 'bg-amber-500 text-neutral-950 font-black' : 'bg-neutral-900 text-neutral-400 border border-neutral-800'
+                }`}
+              >
+                8 Compassos
+              </button>
+              <button
+                onClick={() => setBattleFormat('2_bars')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                  battleFormat === '2_bars' ? 'bg-amber-500 text-neutral-950 font-black' : 'bg-neutral-900 text-neutral-400 border border-neutral-800'
+                }`}
+              >
+                Bate-e-Volta (2)
               </button>
             </div>
           </div>
 
-          <div>
-            <h3 className="text-xl sm:text-2xl font-black text-white">{liveCall.title || 'Mentoria Prática ao Vivo'}</h3>
-            <p className="text-xs sm:text-sm text-neutral-300 mt-1">{liveCall.description}</p>
+          {/* Active MC Turn & Bar Visualizer */}
+          <div className={`rounded-2xl border p-5 transition-all text-center space-y-4 ${
+            currentMC === 'MC 1 (Ataque)'
+              ? 'border-amber-500/60 bg-gradient-to-b from-amber-950/30 to-neutral-900/90 shadow-lg shadow-amber-950/20'
+              : 'border-red-500/60 bg-gradient-to-b from-red-950/30 to-neutral-900/90 shadow-lg shadow-red-950/20'
+          }`}>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-neutral-400 uppercase tracking-wider">
+                Round {currentRound} • {battleBpm} BPM
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${
+                currentMC === 'MC 1 (Ataque)' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-red-500/20 text-red-300 border border-red-500/40'
+              }`}>
+                {currentMC}
+              </span>
+            </div>
+
+            {/* Big Visual Pulse Bar */}
+            <div className="py-2">
+              <div className="text-4xl sm:text-5xl font-black tracking-tight text-white flex items-center justify-center gap-3 font-display">
+                <span>Compasso {currentBar}</span>
+                <span className="text-neutral-500 text-2xl font-sans">/ {maxBars}</span>
+              </div>
+              <p className="text-xs font-semibold text-neutral-400 mt-1">
+                {currentMC === 'MC 1 (Ataque)' ? `Vez de: ${mc1Name}` : `Vez de: ${mc2Name}`}
+              </p>
+            </div>
+
+            {/* 4 Beat Pulse Spheres */}
+            <div className="grid grid-cols-4 gap-2.5 max-w-sm mx-auto pt-1">
+              {[1, 2, 3, 4].map((step) => {
+                const isActiveStep = isBattleRunning && currentBeatStep === step;
+                return (
+                  <div
+                    key={step}
+                    className={`py-3 rounded-xl border flex flex-col items-center justify-center transition-all ${
+                      isActiveStep
+                        ? 'border-amber-400 bg-amber-500 text-neutral-950 font-black scale-110 shadow-lg shadow-amber-500/40'
+                        : 'border-neutral-800 bg-neutral-900 text-neutral-400 font-bold'
+                    }`}
+                  >
+                    <span className="text-sm">{step}</span>
+                    <span className="text-[9px] uppercase font-mono tracking-tighter">Tempo</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="pt-2 flex flex-wrap items-center gap-3">
-            <a
-              href={currentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs shadow-lg shadow-red-600/30 transition-all hover:scale-105"
-            >
-              <Headphones className="h-4 w-4" />
-              <span>Entrar na Aula ao Vivo Agora</span>
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
+          {/* Battle Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex items-center gap-2">
+              {!isBattleRunning ? (
+                <button
+                  onClick={handleStartBattle}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-black text-xs shadow-lg shadow-emerald-500/30 transition-all hover:scale-105"
+                >
+                  <Play className="h-4 w-4 fill-current" />
+                  <span>Iniciar Duelo</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handlePauseBattle}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-lg shadow-amber-500/30 transition-all hover:scale-105"
+                >
+                  <Square className="h-4 w-4 fill-current" />
+                  <span>Pausar</span>
+                </button>
+              )}
 
+              <button
+                onClick={handleSwitchMCTurn}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-xs font-bold text-neutral-200 transition-colors"
+                title="Trocar a vez do MC imediatamente"
+              >
+                <SkipForward className="h-3.5 w-3.5 text-amber-400" />
+                <span>Trocar MC</span>
+              </button>
+
+              <button
+                onClick={handleResetBattle}
+                className="p-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white transition-colors"
+                title="Reiniciar contagem de rounds"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* Quick Beat Trigger Button */}
             <button
-              onClick={onOpenAdmin}
-              className="flex items-center gap-1.5 px-4 py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-xs font-bold text-neutral-300 transition-colors"
+              onClick={onToggleBeat}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                isPlayingBeat
+                  ? 'bg-red-500/20 border border-red-500/40 text-red-300'
+                  : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white'
+              }`}
             >
-              <ShieldCheck className="h-3.5 w-3.5 text-amber-400" />
-              <span>Painel do Professor</span>
+              <Volume2 className="h-3.5 w-3.5 text-amber-400" />
+              <span>{isPlayingBeat ? 'Pausar Beat' : 'Tocar Beat'}</span>
             </button>
           </div>
         </div>
-      )}
+
+        {/* Right Column: Random Freestyle Word & Rhyme Suggestions (5 Cols) */}
+        <div className="lg:col-span-5 rounded-3xl border border-neutral-800 bg-neutral-950 p-6 sm:p-7 space-y-5 shadow-xl flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold">
+                  <Lightbulb className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 className="text-base font-black text-white">Sorteador de Palavras ao Vivo</h3>
+                  <p className="text-xs text-neutral-400">Temas e palavras surpresa para a call</p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleNextRandomWord}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs shadow-md shadow-amber-500/20 transition-all hover:scale-105"
+              >
+                <Shuffle className="h-3 w-3" />
+                <span>Sortear</span>
+              </button>
+            </div>
+
+            {/* Category Filter Pills */}
+            <div className="flex flex-wrap gap-1">
+              {[
+                { id: 'all', label: 'Todas' },
+                { id: 'conceito', label: 'Conceitos' },
+                { id: 'sangue', label: 'Sangue' },
+                { id: 'rica', label: 'Rimas Ricas' },
+                { id: 'objeto', label: 'Objetos' },
+                { id: 'gastacao', label: 'Gastação' },
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setWordCategory(cat.id)}
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                    wordCategory === cat.id
+                      ? 'bg-amber-500 text-neutral-950 font-black'
+                      : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Word Display Box */}
+            <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-br from-amber-950/20 via-neutral-900 to-neutral-900 p-5 text-center space-y-2 relative overflow-hidden">
+              <div className="flex items-center justify-between text-[10px] font-mono text-neutral-400 uppercase">
+                <span className="bg-neutral-800 px-2 py-0.5 rounded text-amber-400 font-bold">{currentWordItem.category}</span>
+                <span className="bg-neutral-800 px-2 py-0.5 rounded text-neutral-300">Dificuldade: {currentWordItem.difficulty}</span>
+              </div>
+
+              <div className="py-2">
+                <span className="text-2xl sm:text-3xl font-black text-white tracking-wide font-display">
+                  "{currentWordItem.word}"
+                </span>
+                <p className="text-xs text-neutral-400 mt-1 italic">
+                  {currentWordItem.tips}
+                </p>
+              </div>
+
+              {/* Rhyme suggestions tags */}
+              <div className="pt-2 border-t border-neutral-800 text-left">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block mb-1.5">
+                  💡 Rimas prontas para usar no 4º compasso:
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {currentWordItem.rhymeSuggestions.map((rhyme, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-neutral-800 text-neutral-200 border border-neutral-700"
+                    >
+                      {rhyme}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Auto rotate settings */}
+          <div className="pt-2 flex items-center justify-between text-xs text-neutral-400 border-t border-neutral-800">
+            <span>Troca automática de palavra:</span>
+            <div className="flex items-center gap-1">
+              {[0, 10, 15, 30].map((sec) => (
+                <button
+                  key={sec}
+                  onClick={() => setAutoRotateSeconds(sec)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    autoRotateSeconds === sec
+                      ? 'bg-amber-500 text-neutral-950'
+                      : 'bg-neutral-900 text-neutral-400 hover:text-white border border-neutral-800'
+                  }`}
+                >
+                  {sec === 0 ? 'Manual' : `${sec}s`}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* NEW FEATURE 3: CHECK-IN DE PRESENÇA NAS MENTORIAS & HISTÓRICO */}
+      <div className="rounded-3xl border border-neutral-800 bg-neutral-950 p-6 sm:p-7 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-bold">
+              <CheckCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-black text-white">Check-in de Presença nas Mentorias</h3>
+              <p className="text-xs text-neutral-400">Garanta sua presença nas aulas com os professores e acumule XP VIP no ranking</p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleCheckinMentorship}
+            disabled={hasCheckedInToday}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs transition-all ${
+              hasCheckedInToday
+                ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-400 cursor-default'
+                : 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950 shadow-lg shadow-emerald-500/30 hover:scale-105'
+            }`}
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            <span>{hasCheckedInToday ? '✓ Presença Registrada Hoje (+150 XP)' : 'Registrar Presença na Call (+150 XP)'}</span>
+          </button>
+        </div>
+
+        {/* Checkin History Display */}
+        {checkins.length > 0 && (
+          <div className="pt-3 border-t border-neutral-800">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-2 block">
+              Suas Presenças Recentes ({checkins.length}):
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              {checkins.slice(0, 3).map((item) => (
+                <div key={item.id} className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-xs font-bold text-white block">{item.channelName}</span>
+                    <span className="text-[10px] text-neutral-400">{item.date} às {item.time}</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold">
+                    +{item.xpEarned} XP
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Voice Channels Section Header & Filter Controls */}
       <div className="space-y-4">
@@ -588,7 +1119,7 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
               </h2>
             </div>
             <p className="text-xs sm:text-sm text-neutral-400">
-              Detector em tempo real: clique em qualquer sala para entrar diretamente na conversa com instrumental ou mentor.
+              Detector em tempo real: chamadas com usuários conectados são <strong>destacadas e movidas automaticamente para o topo</strong>.
             </p>
           </div>
 
@@ -597,31 +1128,61 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
             <span className={`h-2.5 w-2.5 rounded-full ${totalOccupants > 0 ? 'bg-red-500 animate-pulse' : 'bg-emerald-400'}`} />
             <span className="text-xs font-bold text-neutral-200">
               {totalOccupants > 0 
-                ? `${totalOccupants} pessoas rimando nas calls`
+                ? `${totalOccupants} pessoa(s) rimando nas calls`
                 : '0 pessoas nas calls no momento (Salas Livres)'
               }
             </span>
           </div>
         </div>
 
+        {/* Occupied Calls Notification Banner (When users are detected) */}
+        {occupiedChannelsCount > 0 && (
+          <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/60 via-indigo-950/40 to-neutral-900 border border-emerald-500/40 text-emerald-300 text-xs shadow-lg animate-in fade-in">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-2.5 w-2.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+              </span>
+              <span className="font-bold">
+                🔥 <strong>{occupiedChannelsCount} chamada(s) com usuários ativos</strong> foram movidas para o topo da lista de opções!
+              </span>
+            </div>
+            {activeCategoryFilter !== 'occupied_only' && (
+              <button
+                onClick={() => setActiveCategoryFilter('occupied_only')}
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 font-bold border border-emerald-500/30 transition-colors whitespace-nowrap"
+              >
+                Ver Apenas Salas Ocupadas
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Search & Category Filter Tabs */}
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
           <div className="flex flex-wrap items-center gap-1.5">
             {categories.map((cat) => {
               const isSelected = activeCategoryFilter === cat.id;
+              const isOccupiedCategory = cat.id === 'occupied_only';
               return (
                 <button
                   key={cat.id}
                   onClick={() => setActiveCategoryFilter(cat.id)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                     isSelected
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                      : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 border border-neutral-800'
+                      ? isOccupiedCategory 
+                        ? 'bg-amber-500 text-neutral-950 shadow-md shadow-amber-500/30 font-black'
+                        : 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 font-black'
+                      : isOccupiedCategory
+                        ? 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30 animate-pulse font-bold'
+                        : 'bg-neutral-900 text-neutral-400 hover:text-white hover:bg-neutral-800 border border-neutral-800'
                   }`}
                 >
                   <span>{cat.label}</span>
                   <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isSelected ? 'bg-white/20 text-white' : 'bg-neutral-800 text-neutral-500'
+                    isSelected 
+                      ? isOccupiedCategory ? 'bg-black/20 text-neutral-950 font-black' : 'bg-white/20 text-white' 
+                      : 'bg-neutral-800 text-neutral-500'
                   }`}>
                     {cat.count}
                   </span>
@@ -647,19 +1208,29 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
       {/* Voice Channels Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredChannels.map((channel) => {
-          const hasUsers = channel.users && channel.users.length > 0;
+          const userCount = (channel.userCount || 0) || (channel.users ? channel.users.length : 0);
+          const hasUsers = userCount > 0;
           const channelUrl = channel.url || `https://discord.com/channels/1522381290001928242`;
-          const isMentoria = channel.id.includes('mentoria') || channel.name.includes('Mentoria') || channel.name.includes('Aula');
 
           return (
             <div
               key={channel.id}
-              className={`rounded-2xl border p-5 transition-all flex flex-col justify-between gap-4 ${
+              className={`rounded-2xl border p-5 transition-all flex flex-col justify-between gap-4 relative overflow-hidden ${
                 hasUsers
-                  ? 'border-indigo-500/50 bg-gradient-to-b from-indigo-950/30 to-neutral-900 shadow-lg shadow-indigo-950/20'
+                  ? 'border-emerald-500/60 ring-2 ring-emerald-500/20 bg-gradient-to-b from-indigo-950/60 via-emerald-950/20 to-neutral-900 shadow-xl shadow-emerald-950/20'
                   : 'border-neutral-800 bg-neutral-900/60 hover:border-neutral-700'
               }`}
             >
+              {/* Highlight Tag when moved to the top due to active users */}
+              {hasUsers && (
+                <div className="absolute top-0 right-0">
+                  <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-bl-xl bg-emerald-500 text-neutral-950 text-[10px] font-black tracking-wide shadow-md">
+                    <Flame className="h-3 w-3 fill-current" />
+                    <span>EM DESTAQUE NO TOPO</span>
+                  </span>
+                </div>
+              )}
+
               <div className="space-y-2.5">
                 {/* Channel Category Tag & Live Badge */}
                 <div className="flex items-center justify-between">
@@ -669,18 +1240,18 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
 
                   <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
                     hasUsers
-                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 font-black'
                       : 'bg-neutral-800/80 border-neutral-700 text-neutral-400'
                   }`}>
                     <span className={`h-1.5 w-1.5 rounded-full ${hasUsers ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'}`} />
-                    <span>{hasUsers ? `👥 ${channel.userCount} na call` : '0 pessoas (Livre)'}</span>
+                    <span>{hasUsers ? `👥 ${userCount} na call` : '0 pessoas (Livre)'}</span>
                   </span>
                 </div>
 
                 {/* Channel Title & Topic */}
                 <div>
                   <h4 className="text-base font-black text-white flex items-center gap-2">
-                    <Headphones className="h-4 w-4 text-indigo-400 shrink-0" />
+                    <Headphones className={`h-4 w-4 shrink-0 ${hasUsers ? 'text-emerald-400 animate-bounce' : 'text-indigo-400'}`} />
                     <span>{channel.name}</span>
                   </h4>
                   {channel.topic && (
@@ -691,7 +1262,7 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
                 </div>
 
                 {/* Detected Live Occupants (shows actual users if any detected) */}
-                {hasUsers && (
+                {hasUsers && channel.users && channel.users.length > 0 && (
                   <div className="pt-2 border-t border-neutral-800">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1.5 flex items-center gap-1">
                       <Mic className="h-3 w-3 text-emerald-400 animate-pulse" />
@@ -701,7 +1272,7 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
                       {channel.users.map((uname, idx) => (
                         <span
                           key={idx}
-                          className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 flex items-center gap-1"
+                          className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 flex items-center gap-1"
                         >
                           <span>🎤</span>
                           <span>{uname}</span>
@@ -718,10 +1289,14 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
                   href={channelUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#5865F2] hover:bg-[#4752c4] text-white text-xs font-black shadow-md shadow-[#5865F2]/20 transition-all hover:scale-[1.02] active:scale-95"
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-xs font-black shadow-md transition-all hover:scale-[1.02] active:scale-95 ${
+                    hasUsers
+                      ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                      : 'bg-[#5865F2] hover:bg-[#4752c4] shadow-[#5865F2]/20'
+                  }`}
                 >
                   <Headphones className="h-3.5 w-3.5" />
-                  <span>Entrar na Call</span>
+                  <span>{hasUsers ? 'Entrar na Call ao Vivo' : 'Entrar na Call'}</span>
                   <ExternalLink className="h-3 w-3" />
                 </a>
 
