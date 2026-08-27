@@ -46,6 +46,9 @@ import {
   AdminPanelModal 
 } from './components/AdminPanelModal';
 import { 
+  KowalskiStudioModal 
+} from './components/KowalskiStudioModal';
+import { 
   GmailAuthModal 
 } from './components/GmailAuthModal';
 import { 
@@ -67,6 +70,7 @@ import {
   BattleTrainingType
 } from './types';
 import { NavigationProvider, NavTabId } from './context/NavigationContext';
+import { SiteCustomizationProvider } from './context/SiteCustomizationContext';
 import { PRESET_BEATS, globalBeatEngine } from './lib/audio/beatEngine';
 import { LESSONS_DATA } from './data/lessons';
 import { CHALLENGES_DATA } from './data/challenges';
@@ -153,6 +157,7 @@ export function App() {
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState<boolean>(false);
   const [isPromptGenOpen, setIsPromptGenOpen] = useState<boolean>(false);
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
+  const [isKowalskiStudioOpen, setIsKowalskiStudioOpen] = useState<boolean>(false);
   const [isGmailAuthOpen, setIsGmailAuthOpen] = useState<boolean>(false);
   const [isVoiceCoachOpen, setIsVoiceCoachOpen] = useState<boolean>(false);
   const [isLiveBannerDismissed, setIsLiveBannerDismissed] = useState<boolean>(false);
@@ -663,52 +668,54 @@ export function App() {
   };
 
   return (
-    <NavigationProvider
-      profile={profile}
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
-      selectedCategory={selectedCategory}
-      setSelectedCategory={setSelectedCategory}
-      onSelectSkillTrack={(skillId) => {
-        setInitialSkillTab(skillId);
-      }}
-    >
-      <div className="min-h-screen bg-[#0a0a0c] text-neutral-100 font-sans selection:bg-amber-500 selection:text-neutral-950 flex flex-col">
-        
-        {/* Toast Notification */}
-        {toastMessage && (
-          <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-neutral-900/95 p-4 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-5 duration-300">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-neutral-950 font-black">
-              {toastMessage.type === 'ach' ? '🏆' : '⚡'}
+    <SiteCustomizationProvider>
+      <NavigationProvider
+        profile={profile}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        selectedCategory={selectedCategory}
+        setSelectedCategory={setSelectedCategory}
+        onSelectSkillTrack={(skillId) => {
+          setInitialSkillTab(skillId);
+        }}
+      >
+        <div className="min-h-screen bg-[#0a0a0c] text-neutral-100 font-sans selection:bg-amber-500 selection:text-neutral-950 flex flex-col">
+          
+          {/* Toast Notification */}
+          {toastMessage && (
+            <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-neutral-900/95 p-4 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-5 duration-300">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-neutral-950 font-black">
+                {toastMessage.type === 'ach' ? '🏆' : '⚡'}
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white">{toastMessage.title}</h4>
+                <p className="text-xs text-neutral-300">{toastMessage.desc}</p>
+              </div>
             </div>
-            <div>
-              <h4 className="text-xs font-bold text-white">{toastMessage.title}</h4>
-              <p className="text-xs text-neutral-300">{toastMessage.desc}</p>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Main Header */}
-        <Header
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          profile={profile}
-          subscription={subscription}
-          liveCall={liveCall}
-          onOpenSubscription={() => setIsSubscriptionOpen(true)}
-          onOpenPromptGen={() => setIsPromptGenOpen(true)}
-          onOpenAdmin={() => setIsAdminOpen(true)}
-          onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
-          onOpenVoiceCoach={() => setIsVoiceCoachOpen(true)}
-          onSelectCategory={handleSelectCategory}
-          selectedCategory={selectedCategory}
-          isPlayingBeat={isPlayingBeat}
-          onToggleBeat={() => {
-            const playing = globalBeatEngine.togglePlay();
-            setIsPlayingBeat(playing);
-          }}
-          currentBeatTitle={currentBeat.title}
-        />
+          {/* Main Header */}
+          <Header
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            profile={profile}
+            subscription={subscription}
+            liveCall={liveCall}
+            onOpenSubscription={() => setIsSubscriptionOpen(true)}
+            onOpenPromptGen={() => setIsPromptGenOpen(true)}
+            onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenStudioConfig={() => setIsKowalskiStudioOpen(true)}
+            onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
+            onOpenVoiceCoach={() => setIsVoiceCoachOpen(true)}
+            onSelectCategory={handleSelectCategory}
+            selectedCategory={selectedCategory}
+            isPlayingBeat={isPlayingBeat}
+            onToggleBeat={() => {
+              const playing = globalBeatEngine.togglePlay();
+              setIsPlayingBeat(playing);
+            }}
+            currentBeatTitle={currentBeat.title}
+          />
 
       {/* Global Real-Time Live Call Broadcast Banner (When Teacher is Live on Discord / Meet) */}
       {liveCall?.isActive && liveCall.url && !isLiveBannerDismissed && (
@@ -808,6 +815,7 @@ export function App() {
             currentBeat={currentBeat}
             onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
             onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenStudioConfig={() => setIsKowalskiStudioOpen(true)}
             onOpenSubscription={() => setIsSubscriptionOpen(true)}
           />
         )}
@@ -981,10 +989,23 @@ export function App() {
         isOpen={isAdminOpen}
         onClose={() => setIsAdminOpen(false)}
         profile={profile}
+        onUpdateProfile={(updated) => {
+          setProfile(updated);
+          try {
+            localStorage.setItem('rimalab_user_profile', JSON.stringify(updated));
+          } catch {}
+          saveUserProfileToFirestore(updated).catch(e => console.warn('Firestore sync error:', e));
+        }}
         currentLiveCall={liveCall}
         onUpdateLiveCall={handleUpdateLiveCall}
         onShowToast={showToast}
         onNavigateToCalls={() => setActiveTab('calls')}
+      />
+
+      <KowalskiStudioModal
+        isOpen={isKowalskiStudioOpen}
+        onClose={() => setIsKowalskiStudioOpen(false)}
+        onShowToast={showToast}
       />
 
       <GmailAuthModal
@@ -1034,6 +1055,7 @@ export function App() {
 
       </div>
     </NavigationProvider>
+    </SiteCustomizationProvider>
   );
 }
 

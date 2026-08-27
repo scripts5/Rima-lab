@@ -25,6 +25,8 @@ export interface DiscordChannel {
   type: ChannelType;
   badge?: string;
   isLive?: boolean;
+  isCallActive?: boolean;
+  userCount?: number;
 }
 
 export interface DiscordCategory {

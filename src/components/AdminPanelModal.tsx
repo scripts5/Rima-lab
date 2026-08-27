@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Lock, 
-  Eye,
-  EyeOff,
+  Eye, 
+  EyeOff, 
   ShieldCheck, 
   Video, 
   Radio, 
@@ -15,15 +15,25 @@ import {
   RefreshCw, 
   Phone, 
   MessageSquare, 
-  KeyRound,
-  Crown,
-  ShieldAlert,
-  Check,
-  Headphones,
-  Zap
+  KeyRound, 
+  Crown, 
+  ShieldAlert, 
+  Check, 
+  Headphones, 
+  Zap,
+  GraduationCap,
+  Award,
+  Sparkles,
+  Layers,
+  Hash,
+  Sliders,
+  Flame,
+  PlusCircle,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { LiveCallSession, UserProfile } from '../types';
-import { saveLiveCallToFirestore } from '../lib/firestoreService';
+import { saveLiveCallToFirestore, saveUserProfileToFirestore } from '../lib/firestoreService';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -33,11 +43,25 @@ interface AdminPanelModalProps {
   onUpdateLiveCall: (callData: Partial<LiveCallSession>) => Promise<boolean>;
   onShowToast: (title: string, message: string, type?: 'success' | 'error' | 'info' | 'xp') => void;
   onNavigateToCalls?: () => void;
+  onUpdateProfile?: (updatedProfile: Partial<UserProfile>) => void;
 }
 
 const AUTHORIZED_ADMIN_EMAILS = [
   'kowalski.madagascar123@gmail.com',
   'ravel.macedo@escola.pr.gov.br',
+];
+
+const AVAILABLE_CHANNELS = [
+  { id: '#iniciantes-treino', name: '#iniciantes-treino', category: 'Fundamentos', minXP: 0 },
+  { id: '#primeiras-rimas', name: '#primeiras-rimas', category: 'Fundamentos', minXP: 0 },
+  { id: '#metronomo-desafios', name: '#metronomo-desafios', category: 'Métrica & Flow', minXP: 55 },
+  { id: '#diccao-rapida', name: '#diccao-rapida', category: 'Métrica & Flow', minXP: 55 },
+  { id: '#speedflow-treino', name: '#speedflow-treino', category: 'Speed Flow', minXP: 110 },
+  { id: '#gastacao-e-tiradas', name: '#gastacao-e-tiradas', category: 'Gastação', minXP: 110 },
+  { id: '#batalha-sangue', name: '#batalha-sangue', category: 'Punchlines', minXP: 165 },
+  { id: '#arena-versus', name: '#arena-versus', category: 'Batalhas', minXP: 165 },
+  { id: '#cypher-ao-vivo', name: '#cypher-ao-vivo', category: 'Batalhas', minXP: 220 },
+  { id: '#masterclass-professores', name: '#masterclass-professores', category: 'Masterclass VIP', minXP: 275 },
 ];
 
 export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
@@ -48,6 +72,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onUpdateLiveCall,
   onShowToast,
   onNavigateToCalls,
+  onUpdateProfile,
 }) => {
   // Check if logged-in user email matches authorized teacher admin emails
   const userEmail = (profile?.email || (typeof window !== 'undefined' && localStorage.getItem('rimalab_user_email')) || '').trim().toLowerCase();
@@ -55,7 +80,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     e => e.toLowerCase() === userEmail
   );
 
-  // Password state: starts completely empty and hidden by default
+  // Password state
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -69,10 +94,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [securityVerified, setSecurityVerified] = useState(false);
 
-  // Auto-authenticate if recognized admin email is logged in
+  // Auto-authenticate if recognized teacher admin email is logged in
   useEffect(() => {
     if (isRecognizedAdminEmail && !isAuthenticated) {
-      // Allow instant access for recognized teacher accounts
       try {
         sessionStorage.setItem('rimalab_admin_auth', 'true');
         sessionStorage.setItem('rimalab_admin_token', 'adm_token_36737829');
@@ -86,7 +110,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [platform, setPlatform] = useState<'whatsapp' | 'discord' | 'meet' | 'zoom' | 'custom'>(
     currentLiveCall?.platform || 'discord'
   );
-  const [callUrl, setCallUrl] = useState(currentLiveCall?.url || 'https://discord.gg/rimalab');
+  const [callUrl, setCallUrl] = useState(currentLiveCall?.url || 'https://discord.gg/7s4Tdd9bz');
   const [callTitle, setCallTitle] = useState(
     currentLiveCall?.title || 'Aula ao Vivo de Métrica & Freestyle com Luquita MC & Kowalski MC'
   );
@@ -96,9 +120,33 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [hostName, setHostName] = useState(currentLiveCall?.hostName || 'Luquita MC & Kowalski MC');
   const [isActive, setIsActive] = useState(currentLiveCall ? currentLiveCall.isActive : true);
 
+  // Admin / Prof Tabs
+  const [activeTab, setActiveTab] = useState<'live_call' | 'student_evolution' | 'ip_trials'>('live_call');
+
+  // Student Evolution State
+  const [targetStudentName, setTargetStudentName] = useState(profile?.artisticName || 'MC Aluno');
+  const [targetStudentXP, setTargetStudentXP] = useState(profile?.totalXP || 150);
+  const [targetStudentLevel, setTargetStudentLevel] = useState(profile?.level || 1);
+  const [unlockedChannelsList, setUnlockedChannelsList] = useState<string[]>(
+    profile?.unlockedChannels || ['#iniciantes-treino', '#primeiras-rimas']
+  );
+  const [teacherFeedbackNote, setTeacherFeedbackNote] = useState('');
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
+
+  // Sync profile data when profile updates
+  useEffect(() => {
+    if (profile) {
+      setTargetStudentName(profile.artisticName || 'MC Aluno');
+      setTargetStudentXP(profile.totalXP || 0);
+      setTargetStudentLevel(profile.level || Math.max(1, Math.floor((profile.totalXP || 0) / 55) + 1));
+      if (profile.unlockedChannels && profile.unlockedChannels.length > 0) {
+        setUnlockedChannelsList(profile.unlockedChannels);
+      }
+    }
+  }, [profile]);
+
   // Admin metrics
   const [adminStats, setAdminStats] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'live_call' | 'ip_trials' | 'students'>('live_call');
 
   useEffect(() => {
     if (currentLiveCall) {
@@ -131,38 +179,27 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       cleanPassword.toLowerCase() === 'rimalab';
 
     if (!rawInput && !isRecognizedAdminEmail) {
-      setAuthError('Por favor, digite a senha de administrador.');
+      setAuthError('Por favor, digite a senha de professor.');
       setIsLoading(false);
       return;
     }
 
-    // Direct Instant Verification for master password or authorized email
     if (isMasterPassword || isEmailInputMatch || isRecognizedAdminEmail) {
       try {
         sessionStorage.setItem('rimalab_admin_auth', 'true');
         sessionStorage.setItem('rimalab_admin_token', 'adm_token_36737829');
         localStorage.setItem('rimalab_admin_auth', 'true');
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
       setIsAuthenticated(true);
       setSecurityVerified(true);
       setPasswordInput('');
       setIsLoading(false);
-      onShowToast('👑 Acesso de Professor Concedido!', 'Credenciais validadas com sucesso. Bem-vindo ao painel mestre.');
+      onShowToast('👑 Acesso de Professor Concedido!', 'Bem-vindo ao Painel dos Professores Kowalski MC & Luquita MC.');
       fetchAdminStats();
-
-      // Async notify server
-      fetch('/api/admin/verify-security', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: '36737829', email: userEmail || rawInput }),
-      }).catch(() => {});
       return;
     }
 
     try {
-      // Backend security verification request
       const res = await fetch('/api/admin/verify-security', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -176,34 +213,18 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             sessionStorage.setItem('rimalab_admin_auth', 'true');
             sessionStorage.setItem('rimalab_admin_token', data.adminToken || 'adm_token_36737829');
             localStorage.setItem('rimalab_admin_auth', 'true');
-          } catch (e) {
-            // ignore
-          }
+          } catch (e) {}
           setIsAuthenticated(true);
           setSecurityVerified(true);
           setPasswordInput('');
-          onShowToast('👑 Acesso de Professor Concedido!', 'Verificação de segurança no servidor concluída com sucesso.');
+          onShowToast('👑 Acesso de Professor Concedido!', 'Bem-vindo ao Painel dos Professores.');
           fetchAdminStats();
           return;
         }
       }
-      
       setAuthError('Senha incorreta. Verifique as credenciais digitadas e tente novamente.');
     } catch (err: any) {
-      // Fallback
-      if (isMasterPassword) {
-        try {
-          sessionStorage.setItem('rimalab_admin_auth', 'true');
-          sessionStorage.setItem('rimalab_admin_token', 'adm_token_36737829');
-          localStorage.setItem('rimalab_admin_auth', 'true');
-        } catch (e) {}
-        setIsAuthenticated(true);
-        setSecurityVerified(true);
-        setPasswordInput('');
-        onShowToast('👑 Acesso de Professor Concedido!', 'Bem-vindo ao Painel Mestre do RimaLab.');
-      } else {
-        setAuthError('Senha incorreta. Verifique as credenciais digitadas e tente novamente.');
-      }
+      setAuthError('Erro ao verificar credenciais. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -213,15 +234,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     try {
       sessionStorage.removeItem('rimalab_admin_auth');
       sessionStorage.removeItem('rimalab_admin_token');
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
     setIsAuthenticated(false);
     setSecurityVerified(false);
     setPasswordInput('');
     setShowPassword(false);
     setAuthError('');
-    onShowToast('🔒 Desconectado', 'Sessão de administrador encerrada com segurança.');
+    onShowToast('🔒 Desconectado', 'Sessão de professor encerrada.');
   };
 
   const fetchAdminStats = async () => {
@@ -236,356 +255,295 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       if (res.ok) {
         const data = await res.json();
         setAdminStats(data);
-        return;
       }
     } catch (err) {
-      console.warn('Using local fallback admin stats:', err);
+      console.warn('Stats fetch notice:', err);
     }
-
-    // Default rich fallback stats if offline / preview container sync
-    setAdminStats({
-      totalRegisteredIPs: 14,
-      totalUsers: 28,
-      totalPracticeSessions: 142,
-      currentLiveCall,
-      ipTrials: [
-        {
-          ip: '192.168.1.104',
-          firstEmail: 'aluno.mc@gmail.com',
-          lastEmail: 'aluno.mc@gmail.com',
-          trialStartedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          trialExpiresAt: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(),
-          daysRemaining: 12,
-          isExpired: false,
-          totalLogins: 5,
-        },
-        {
-          ip: '201.86.42.11',
-          firstEmail: 'freestyle.flow@hotmail.com',
-          lastEmail: 'freestyle.flow@hotmail.com',
-          trialStartedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          trialExpiresAt: new Date(Date.now() + 9 * 24 * 60 * 60 * 1000).toISOString(),
-          daysRemaining: 9,
-          isExpired: false,
-          totalLogins: 9,
-        },
-        {
-          ip: '177.18.99.202',
-          firstEmail: 'batalhador_sp@gmail.com',
-          lastEmail: 'outro_teste@gmail.com',
-          trialStartedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-          trialExpiresAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-          daysRemaining: 0,
-          isExpired: true,
-          totalLogins: 18,
-        },
-      ],
-      users: [
-        { id: 'user_01', email: 'aluno.mc@gmail.com', artisticName: 'MC Foco & Flow', plan: 'PRO', totalXP: 1450, sessions: 18 },
-        { id: 'user_02', email: 'kowalski.madagascar123@gmail.com', artisticName: 'Kowalski MC (Professor)', plan: 'VIP_ANNUAL', totalXP: 9800, sessions: 94 },
-        { id: 'user_03', email: 'luquita.freestyle@gmail.com', artisticName: 'Luquita MC (Professor)', plan: 'VIP_ANNUAL', totalXP: 9200, sessions: 88 },
-      ]
-    });
   };
 
-  const handleBroadcastCall = async (activeState: boolean) => {
+  const handleBroadcastCall = async (publishLive: boolean) => {
     setIsLoading(true);
-    const rawUrl = callUrl.trim();
-    const cleanUrl = rawUrl ? (/^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`) : 'https://discord.gg/rimalab';
-    setCallUrl(cleanUrl);
-
-    const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
-
-    const payload: any = {
-      adminToken: storedToken,
-      password: '36737829',
-      email: userEmail || 'kowalski.madagascar123@gmail.com',
+    const updatedCall: Partial<LiveCallSession> = {
       platform,
-      url: cleanUrl,
-      title: callTitle.trim() || 'Mentoria de Freestyle no Discord com os Professores',
-      description: callDescription.trim() || 'Entre na sala de voz para rimar no beat e receber feedback em tempo real.',
+      url: callUrl.trim(),
+      title: callTitle.trim() || 'Aula ao Vivo com os Professores',
+      description: callDescription.trim() || 'Treino de rima e métrica com correções ao vivo!',
       hostName: hostName.trim() || 'Kowalski MC & Luquita MC',
-      isActive: activeState,
+      isActive: publishLive,
+      startedAt: new Date().toISOString(),
+      targetTier: 'ALL',
     };
 
-    // Step 1: Immediate instant local UI state update
-    setIsActive(activeState);
-    await onUpdateLiveCall(payload);
-
-    // Step 2: Persist to Firestore database
-    saveLiveCallToFirestore(payload).catch(e => console.warn('Firestore live call save:', e));
-
-    // Step 3: Broadcast through backend API & SSE stream to all clients
     try {
-      const liveRes = await fetch('/api/admin/live-call', {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/live-call', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${storedToken}`,
           'x-admin-password': '36737829',
-          'x-admin-token': storedToken,
-          'x-admin-email': userEmail || 'kowalski.madagascar123@gmail.com',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...updatedCall,
+          password: '36737829',
+          adminToken: storedToken,
+          email: userEmail,
+        }),
       });
 
-      if (liveRes.ok) {
-        const liveData = await liveRes.json();
-        setSecurityVerified(true);
-        onShowToast(
-          activeState ? '🔴 Chamada ao Vivo Transmitida!' : '⏹️ Transmissão Finalizada',
-          activeState ? 'O link foi transmitido com sucesso no Servidor Discord e todos os alunos já podem entrar!' : 'O banner de mentoria foi recolhido.'
-        );
+      if (res.ok) {
+        setIsActive(publishLive);
+        await onUpdateLiveCall(updatedCall);
+        saveLiveCallToFirestore(updatedCall).catch(() => {});
+
+        if (publishLive) {
+          onShowToast('🔴 Aula Ao Vivo Transmitida!', `Link de ${platform.toUpperCase()} transmitido a todos os alunos.`, 'success');
+        } else {
+          onShowToast('⏹️ Transmissão Encerrada', 'A chamada de vídeo foi desativada com sucesso.', 'info');
+        }
       } else {
-        onShowToast(
-          activeState ? '🔴 Chamada ao Vivo Ativada!' : '⏹️ Transmissão Finalizada',
-          activeState ? 'Link publicado no site e no servidor Discord.' : 'Transmissão finalizada.'
-        );
+        throw new Error('Falha na resposta do servidor');
       }
     } catch (err: any) {
-      console.warn('Live call broadcast server sync fallback active');
+      setIsActive(publishLive);
+      await onUpdateLiveCall(updatedCall);
+      saveLiveCallToFirestore(updatedCall).catch(() => {});
       onShowToast(
-        activeState ? '🔴 Chamada ao Vivo Ativada!' : '⏹️ Transmissão Finalizada',
-        activeState ? 'Link atualizado com sucesso no painel.' : 'Transmissão finalizada.'
+        publishLive ? '🔴 Aula Ao Vivo Transmitida!' : '⏹️ Transmissão Encerrada',
+        'Link atualizado com sucesso.',
+        'success'
       );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const setPlatformQuickTemplate = (type: 'whatsapp' | 'discord' | 'meet' | 'discord_pratica_1' | 'discord_freestyle_24h' | 'discord_aula_ini_1' | 'discord_mentoria_1_1' | 'discord_aula_inter_1' | 'discord_masterclass' | 'discord_roda_rim') => {
-    if (type === 'whatsapp') {
-      setPlatform('whatsapp');
-      setCallUrl('https://chat.whatsapp.com/rimalab-mentoria');
-      setCallTitle('Mentoria de Freestyle no WhatsApp com os Professores');
-      setCallDescription('Clique para entrar no grupo oficial com chamada de áudio e vídeo dos MCs.');
-    } else if (type === 'discord' || type === 'discord_pratica_1') {
-      setPlatform('discord');
-      setCallUrl('https://discord.com/channels/1522381290001928242');
-      setCallTitle('👥 Prática Livre 1 • Rima ao Vivo no Discord');
-      setCallDescription('Entre na sala de voz 👥 Prática Livre 1 do servidor 🎤 Academia de Rimas para rimar ao vivo no beat.');
-    } else if (type === 'discord_freestyle_24h') {
-      setPlatform('discord');
-      setCallUrl('https://discord.com/channels/1522381290001928242');
-      setCallTitle('👥 Freestyle 24h • Treino Aberto de Rimas');
-      setCallDescription('Canal de voz 24h aberto no servidor para treinar rimas a qualquer momento.');
-    } else if (type === 'discord_aula_ini_1') {
-      setPlatform('discord');
-      setCallUrl('https://discord.com/channels/1522381290001928242');
-      setCallTitle('👥 Aula Iniciante 1 • Fundamentos do Freestyle');
-      setCallDescription('Aula prática ao vivo para quem está começando: métrica, fonemas e primeiras rimas.');
-    } else if (type === 'discord_mentoria_1_1') {
-      setPlatform('discord');
-      setCallUrl('https://discord.com/channels/1522381290001928242');
-      setCallTitle('👥 Mentoria Um-a-Um • Atendimento Individual');
-      setCallDescription('Mentoria personalizada direto com os professores Kowalski MC & Luquita MC.');
-    } else if (type === 'discord_aula_inter_1') {
-      setPlatform('discord');
-      setCallUrl('https://discord.com/channels/1522381290001928242');
-      setCallTitle('👥 Aula Intermediário 1 • Métrica, Flow & Encaixe');
-      setCallDescription('Aula de subdivisão rítmica, velocidade de raciocínio e flow melódico.');
-    } else if (type === 'discord_masterclass') {
-      setPlatform('discord');
-      setCallUrl('https://discord.com/channels/1522381290001928242');
-      setCallTitle('👥 Masterclass Avançada • Batalhas & Alta Performance');
-      setCallDescription('Aula magna de alto rendimento para MCs de palco e batalha de sangue.');
-    } else if (type === 'discord_roda_rim') {
-      setPlatform('discord');
-      setCallUrl('https://discord.com/channels/1522381290001928242');
-      setCallTitle('👥 Roda de Rim • Roda de Rimas dos MCs');
-      setCallDescription('Roda de rima ao vivo entre os MCs no servidor Discord.');
-    } else if (type === 'meet') {
-      setPlatform('meet');
-      setCallUrl('https://meet.google.com/abc-rima-xyz');
-      setCallTitle('Mentoria 1-a-1 Google Meet com Kowalski MC & Luquita MC');
-      setCallDescription('Sala de vídeo exclusiva para aula prática e tira-dúvidas de métrica.');
+  const setPlatformQuickTemplate = (p: 'discord' | 'whatsapp' | 'meet') => {
+    setPlatform(p);
+    if (p === 'discord') {
+      setCallUrl('https://discord.gg/7s4Tdd9bz');
+      setCallTitle('🎤 Aula de Freestyle & Cypher no Servidor Discord');
+      setCallDescription('Entre na sala de voz da Academia de Rimas para rimar nos beats.');
+    } else if (p === 'whatsapp') {
+      setCallUrl('https://chat.whatsapp.com/rimalab');
+      setCallTitle('📱 Mentoria 1v1 no Grupo VIP WhatsApp');
+      setCallDescription('Chamada de vídeo direta para correção de 4 compassos e métrica.');
+    } else if (p === 'meet') {
+      setCallUrl('https://meet.google.com/new');
+      setCallTitle('💻 Masterclass de Rimas no Google Meet');
+      setCallDescription('Aula com compartilhamento de tela e análise lírica.');
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl rounded-3xl border border-amber-500/40 bg-neutral-950 p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
-        
-        {/* Close Button */}
-        <button
-          id="close-admin-modal-btn"
-          onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-        >
-          <X className="h-5 w-5" />
-        </button>
+  // Evolution & XP Management Handlers (55 XP Rule)
+  const handleAddXPBonus = (amount: number, reason: string) => {
+    const newXP = Math.max(0, targetStudentXP + amount);
+    const newLevel = Math.max(1, Math.floor(newXP / 55) + 1);
+    setTargetStudentXP(newXP);
+    setTargetStudentLevel(newLevel);
 
+    // Auto-unlock channels based on 55 XP threshold
+    const eligibleChannels = AVAILABLE_CHANNELS.filter(ch => newXP >= ch.minXP).map(ch => ch.id);
+    const mergedChannels = Array.from(new Set([...unlockedChannelsList, ...eligibleChannels]));
+    setUnlockedChannelsList(mergedChannels);
+
+    onShowToast(`⚡ +${amount} XP Adicionado`, `${reason} • Nível Calculado: ${newLevel} (a cada 55 XP)`, 'xp');
+  };
+
+  const handleToggleChannelUnlock = (channelId: string) => {
+    setUnlockedChannelsList(prev => {
+      if (prev.includes(channelId)) {
+        return prev.filter(c => c !== channelId);
+      }
+      return [...prev, channelId];
+    });
+  };
+
+  const handleSaveStudentEvolution = () => {
+    setIsSavingStudent(true);
+    const calculatedLevel = Math.max(1, Math.floor(targetStudentXP / 55) + 1);
+
+    const updatedProfileData: Partial<UserProfile> = {
+      artisticName: targetStudentName.trim() || 'MC Aluno',
+      totalXP: targetStudentXP,
+      level: calculatedLevel,
+      unlockedChannels: unlockedChannelsList,
+      bio: teacherFeedbackNote 
+        ? `${profile?.bio || ''}\n\n[Nota do Professor: ${teacherFeedbackNote}]`
+        : profile?.bio,
+    };
+
+    if (onUpdateProfile) {
+      onUpdateProfile(updatedProfileData);
+    }
+
+    if (profile) {
+      const fullUpdated = { ...profile, ...updatedProfileData };
+      saveUserProfileToFirestore(fullUpdated).catch(e => console.warn('Firestore student sync notice:', e));
+      try {
+        localStorage.setItem('rimalab_user_profile', JSON.stringify(fullUpdated));
+      } catch {}
+    }
+
+    setTimeout(() => {
+      setIsSavingStudent(false);
+      onShowToast('🎓 Evolução do Aluno Salva!', `XP: ${targetStudentXP} | Nível ${calculatedLevel} | ${unlockedChannelsList.length} canais liberados.`, 'success');
+    }, 300);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4 overflow-y-auto">
+      <div className="w-full max-w-3xl bg-neutral-950 border border-neutral-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200">
+        
         {/* Modal Header */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-neutral-950 font-black text-xl shadow-lg shadow-amber-500/20">
-            👑
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
-                ÁREA RESTRITA DO PROFESSOR
-              </span>
-              <span className="text-xs text-neutral-400">• Painel de Controle</span>
+        <div className="bg-gradient-to-r from-amber-950/80 via-neutral-900 to-orange-950/80 p-3.5 sm:p-4 border-b border-amber-500/30 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-neutral-950 font-black shadow-lg shadow-amber-500/30 shrink-0">
+              <GraduationCap className="h-5 w-5 fill-neutral-950" />
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-white">
-              Painel Mestre • Luquita MC & Kowalski MC
-            </h2>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display font-black text-sm sm:text-base text-white">
+                  Painel dos Professores
+                </h3>
+                <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-black uppercase text-amber-300 border border-amber-500/40">
+                  Prof (Luquita & Kowalski)
+                </span>
+              </div>
+              <p className="text-[11px] text-neutral-400">
+                Gestão de chamadas ao vivo, progressão a cada 55 XP e controle de evolução dos MCs.
+              </p>
+            </div>
           </div>
+
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        {/* Password Authentication Screen */}
+        {/* Modal Content */}
         {!isAuthenticated ? (
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/80 p-6 space-y-5">
-            {isRecognizedAdminEmail ? (
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
-                <Crown className="h-6 w-6 text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">Conta de Professor Reconhecida</span>
-                    <span className="text-[10px] bg-amber-400 text-neutral-950 px-1.5 py-0.5 rounded font-black">OFICIAL</span>
-                  </div>
-                  <p className="text-xs text-neutral-200">
-                    Você está conectado como <strong className="text-white font-mono">{userEmail}</strong>.
-                  </p>
-                  <button
-                    id="quick-admin-login-recognized-btn"
-                    onClick={() => handlePasswordSubmit()}
-                    className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-xs font-black text-neutral-950 shadow-md hover:brightness-110 active:scale-95 transition-all"
-                  >
-                    <ShieldCheck className="h-4 w-4" />
-                    <span>Entrar no Painel como Professor Autorizado</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-start gap-3 text-xs text-neutral-300">
-                <KeyRound className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-white">Esta área é reservada exclusivamente para os professores e administradores.</p>
-                  <p className="text-neutral-400 mt-1">
-                    Insira a sua senha de acesso ou entre com a sua conta Google de professor autorizada para gerenciar chamadas e transmissões ao vivo.
-                  </p>
-                </div>
-              </div>
-            )}
+          /* Password Authentication Screen */
+          <div className="p-6 sm:p-8 flex flex-col items-center justify-center text-center space-y-5">
+            <div className="h-16 w-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-xl">
+              <Lock className="h-8 w-8" />
+            </div>
 
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase text-neutral-400 mb-1">
-                  Senha de Administrador:
-                </label>
-                <div className="relative">
-                  <input
-                    id="admin-password-input"
-                    type={showPassword ? 'text' : 'password'}
-                    value={passwordInput}
-                    onChange={(e) => setPasswordInput(e.target.value)}
-                    placeholder="Digite a senha de professor..."
-                    className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 pr-12 text-sm text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none tracking-widest font-mono"
-                    autoFocus
-                  />
-                  <button
-                    id="toggle-password-visibility-btn"
-                    type="button"
-                    onClick={() => setShowPassword(prev => !prev)}
-                    title={showPassword ? 'Ocultar senha' : 'Exibir senha'}
-                    aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
-                    className="absolute right-3.5 top-3.5 p-1 rounded-lg text-neutral-400 hover:text-amber-400 hover:bg-neutral-800/80 focus:outline-none transition-colors"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-amber-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-neutral-400" />
-                    )}
-                  </button>
-                </div>
-                <div className="flex items-center justify-between mt-1 text-[11px] text-neutral-500">
-                  <span>Proteção de acesso aos links de aula</span>
-                  <span className="text-neutral-400">
-                    {showPassword ? '👁️ Senha visível' : '🔒 Senha protegida'}
-                  </span>
-                </div>
+            <div className="space-y-1 max-w-md">
+              <h4 className="font-display text-lg font-black text-white">
+                Área Restrita aos Professores
+              </h4>
+              <p className="text-xs text-neutral-400">
+                Digite a senha de professor para gerenciar aulas ao vivo e evolução técnica dos alunos.
+              </p>
+            </div>
+
+            <form onSubmit={handlePasswordSubmit} className="w-full max-w-sm space-y-3">
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="Digite a senha de professor..."
+                  className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-xs text-white placeholder:text-neutral-500 focus:border-amber-500 focus:outline-none pr-10 font-mono"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
 
               {authError && (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-400">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{authError}</span>
-                </div>
+                <p className="text-xs text-red-400 bg-red-500/10 p-2.5 rounded-xl border border-red-500/20">
+                  {authError}
+                </p>
               )}
 
               <button
-                id="submit-admin-password-btn"
                 type="submit"
-                disabled={isLoading || (!passwordInput.trim() && !isRecognizedAdminEmail)}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-3 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-95 transition-all"
               >
                 {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                <span>Verificar Credenciais & Acessar Painel</span>
+                <span>Verificar Acesso de Professor</span>
               </button>
             </form>
           </div>
         ) : (
-          /* Authenticated Admin Dashboard */
-          <div className="space-y-5">
+          /* Authenticated Professor Dashboard */
+          <div className="flex-1 flex flex-col overflow-hidden">
             
-            {/* Top Navigation Tabs */}
-            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
-              <div className="flex items-center gap-2">
+            {/* Top Professor Tabs */}
+            <div className="bg-neutral-900/90 border-b border-neutral-800 p-2 sm:px-4 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 bg-neutral-950 p-1 rounded-xl border border-neutral-800 overflow-x-auto">
                 <button
-                  id="tab-admin-live-call"
+                  id="tab-prof-live-call"
                   onClick={() => setActiveTab('live_call')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                     activeTab === 'live_call'
-                      ? 'bg-amber-500 text-neutral-950'
-                      : 'text-neutral-400 hover:text-white bg-neutral-900'
+                      ? 'bg-amber-500 text-neutral-950 shadow'
+                      : 'text-neutral-400 hover:text-white'
                   }`}
                 >
                   <Video className="h-3.5 w-3.5" />
-                  <span>Transmissão de Chamada</span>
+                  <span>Transmissão de Chamadas</span>
                 </button>
+
                 <button
-                  id="tab-admin-ip-trials"
+                  id="tab-prof-students"
+                  onClick={() => setActiveTab('student_evolution')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTab === 'student_evolution'
+                      ? 'bg-amber-500 text-neutral-950 shadow'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <GraduationCap className="h-3.5 w-3.5" />
+                  <span>Alunos & Evolução (55 XP/Nv)</span>
+                </button>
+
+                <button
+                  id="tab-prof-ip-trials"
                   onClick={() => {
                     setActiveTab('ip_trials');
                     fetchAdminStats();
                   }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                     activeTab === 'ip_trials'
-                      ? 'bg-amber-500 text-neutral-950'
-                      : 'text-neutral-400 hover:text-white bg-neutral-900'
+                      ? 'bg-amber-500 text-neutral-950 shadow'
+                      : 'text-neutral-400 hover:text-white'
                   }`}
                 >
                   <Globe className="h-3.5 w-3.5" />
-                  <span>IPs & Testes Grátis (14 Dias)</span>
+                  <span>IPs & Testes (14 Dias)</span>
                 </button>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleLogout}
-                  title="Sair do painel de administração"
-                  className="px-2.5 py-1 text-[11px] font-bold text-neutral-400 hover:text-red-400 hover:bg-red-950/30 rounded border border-neutral-800 transition-colors"
-                >
-                  Sair
-                </button>
-                <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Servidor Conectado
-                </span>
-              </div>
+              <button
+                onClick={handleLogout}
+                className="px-2.5 py-1 text-[11px] font-bold text-neutral-400 hover:text-red-400 bg-neutral-950 rounded-lg border border-neutral-800 transition-colors shrink-0"
+              >
+                Sair
+              </button>
             </div>
 
-            {/* Tab 1: Live Call Broadcast */}
+            {/* TAB 1: TRANSMISSÃO DE CHAMADAS */}
             {activeTab === 'live_call' && (
-              <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-neutral-950">
                 <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                      <h4 className="font-bold text-sm text-white flex items-center gap-2">
                         <Radio className="h-4 w-4 text-red-500 animate-pulse" />
                         Enviar Chamada de Vídeo para os Alunos
-                      </h3>
+                      </h4>
                       <p className="text-xs text-neutral-400">
                         Envie o link do WhatsApp, Discord ou Google Meet para que todos os alunos entrem na aula ao vivo com você.
                       </p>
@@ -601,250 +559,331 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     )}
                   </div>
 
-                  {/* Backend Security Check Badge */}
-                  <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300">
-                    <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
-                    <span>
-                      <strong>Segurança Ativa:</strong> As alterações de link são validadas e protegidas diretamente no backend antes da publicação.
-                    </span>
-                  </div>
-
                   {/* Quick Platform Presets */}
-                  <div className="space-y-2">
-                    <label className="block text-[11px] font-bold uppercase text-neutral-400">
-                      Escolha a Plataforma da Chamada:
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPlatformQuickTemplate('discord')}
-                        className={`flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold border transition-all ${
-                          platform === 'discord'
-                            ? 'bg-[#5865F2] text-white border-[#5865F2] shadow-lg shadow-[#5865F2]/20'
-                            : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <MessageSquare className="h-4 w-4" />
-                        <span>Discord Voice (Servidor)</span>
-                      </button>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPlatformQuickTemplate('discord')}
+                      className={`flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold border transition-all ${
+                        platform === 'discord'
+                          ? 'bg-[#5865F2] text-white border-[#5865F2] shadow-lg shadow-[#5865F2]/20'
+                          : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                      }`}
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                      <span>Discord Voice</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setPlatformQuickTemplate('whatsapp')}
-                        className={`flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold border transition-all ${
-                          platform === 'whatsapp'
-                            ? 'bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
-                            : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <Phone className="h-4 w-4" />
-                        <span>WhatsApp Vídeo</span>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => setPlatformQuickTemplate('whatsapp')}
+                      className={`flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold border transition-all ${
+                        platform === 'whatsapp'
+                          ? 'bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
+                          : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                      }`}
+                    >
+                      <Phone className="h-4 w-4" />
+                      <span>WhatsApp Vídeo</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setPlatformQuickTemplate('meet')}
-                        className={`flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold border transition-all ${
-                          platform === 'meet'
-                            ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20'
-                            : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
-                        }`}
-                      >
-                        <Video className="h-4 w-4" />
-                        <span>Google Meet / Zoom</span>
-                      </button>
-                    </div>
-
-                    {/* Discord Server 🎤 Academia de Rimas Quick Channels */}
-                    <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/30 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-indigo-300 flex items-center gap-1.5">
-                          <Headphones className="h-3.5 w-3.5 text-indigo-400" />
-                          <span>Canais do Servidor: 🎤 Academia de Rimas</span>
-                        </span>
-                        <span className="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                          ● Servidor Ativo
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setPlatformQuickTemplate('discord_pratica_1')}
-                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
-                        >
-                          <span>👥</span>
-                          <span className="truncate">Prática Livre 1</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPlatformQuickTemplate('discord_freestyle_24h')}
-                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
-                        >
-                          <span>👥</span>
-                          <span className="truncate">Freestyle 24h</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPlatformQuickTemplate('discord_aula_ini_1')}
-                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
-                        >
-                          <span>👥</span>
-                          <span className="truncate">Aula Iniciante 1</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPlatformQuickTemplate('discord_mentoria_1_1')}
-                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
-                        >
-                          <span>👥</span>
-                          <span className="truncate">Mentoria 1-a-1</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPlatformQuickTemplate('discord_aula_inter_1')}
-                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
-                        >
-                          <span>👥</span>
-                          <span className="truncate">Aula Intermediário 1</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPlatformQuickTemplate('discord_masterclass')}
-                          className="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/40 text-[11px] font-bold text-indigo-200 text-left transition-colors flex items-center gap-1.5"
-                        >
-                          <span>👥</span>
-                          <span className="truncate">Masterclass</span>
-                        </button>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPlatformQuickTemplate('meet')}
+                      className={`flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-bold border transition-all ${
+                        platform === 'meet'
+                          ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-500/20'
+                          : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:border-neutral-700'
+                      }`}
+                    >
+                      <Video className="h-4 w-4" />
+                      <span>Google Meet</span>
+                    </button>
                   </div>
 
-                  {/* Call URL */}
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
-                      Link / URL da Chamada de Vídeo:
-                    </label>
-                    <input
-                      type="url"
-                      value={callUrl}
-                      onChange={(e) => setCallUrl(e.target.value)}
-                      placeholder="Ex: https://chat.whatsapp.com/... ou https://discord.gg/..."
-                      className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3.5 py-2.5 text-xs text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none font-mono"
-                      required
-                    />
-                  </div>
-
-                  {/* Call Title & Description */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Fields */}
+                  <div className="space-y-3">
                     <div>
                       <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
-                        Título da Aula:
+                        Link Direto da Chamada:
+                      </label>
+                      <input
+                        type="url"
+                        value={callUrl}
+                        onChange={(e) => setCallUrl(e.target.value)}
+                        placeholder="https://discord.gg/... ou https://meet.google.com/..."
+                        className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3.5 py-2.5 text-xs text-white focus:border-amber-500 focus:outline-none font-mono"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
+                          Título da Aula / Chamada:
+                        </label>
+                        <input
+                          type="text"
+                          value={callTitle}
+                          onChange={(e) => setCallTitle(e.target.value)}
+                          placeholder="Ex: Treino de 4 Compassos e Métrica"
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
+                          Nome dos Professores:
+                        </label>
+                        <input
+                          type="text"
+                          value={hostName}
+                          onChange={(e) => setHostName(e.target.value)}
+                          placeholder="Ex: Kowalski MC & Luquita MC"
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
+                        Instruções para os Alunos:
                       </label>
                       <input
                         type="text"
-                        value={callTitle}
-                        onChange={(e) => setCallTitle(e.target.value)}
-                        placeholder="Ex: Aula de Improviso & Métrica"
+                        value={callDescription}
+                        onChange={(e) => setCallDescription(e.target.value)}
+                        placeholder="Ex: Entrem com fone de ouvido para treino 1v1 no beat."
                         className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
-                        Nome do Professor(a):
-                      </label>
-                      <input
-                        type="text"
-                        value={hostName}
-                        onChange={(e) => setHostName(e.target.value)}
-                        placeholder="Ex: Kowalski MC & Luquita MC"
-                        className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
-                      Instruções para os Alunos:
-                    </label>
-                    <input
-                      type="text"
-                      value={callDescription}
-                      onChange={(e) => setCallDescription(e.target.value)}
-                      placeholder="Ex: Entrem no canal de voz para rimar no beat ao vivo."
-                      className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
-                    />
                   </div>
 
                   {/* Actions */}
-                  <div className="space-y-2 pt-2">
-                    <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    <button
+                      id="broadcast-live-btn"
+                      onClick={() => handleBroadcastCall(true)}
+                      disabled={isLoading || !callUrl}
+                      className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-500 py-3 text-xs font-black text-white shadow-xl shadow-red-500/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
+                      <span>Transmitir Chamada aos Alunos Agora</span>
+                    </button>
+
+                    {isActive && (
                       <button
-                        id="broadcast-live-btn"
-                        onClick={() => handleBroadcastCall(true)}
-                        disabled={isLoading || !callUrl}
-                        className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-500 py-3 text-xs font-black text-white shadow-xl shadow-red-500/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                        onClick={() => handleBroadcastCall(false)}
+                        disabled={isLoading}
+                        className="px-4 py-3 rounded-xl border border-neutral-700 bg-neutral-900 text-xs font-bold text-neutral-300 hover:bg-neutral-800 hover:text-white"
                       >
-                        {isLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
-                        <span>Validar no Backend & Transmitir Chamada aos Alunos</span>
+                        Encerrar
                       </button>
-
-                      {isActive && (
-                        <button
-                          id="stop-live-btn"
-                          onClick={() => handleBroadcastCall(false)}
-                          disabled={isLoading}
-                          className="px-4 py-3 rounded-xl border border-neutral-700 bg-neutral-900 text-xs font-bold text-neutral-300 hover:bg-neutral-800 hover:text-white"
-                        >
-                          Encerrar Transmissão
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Quick Access / Test Live Call */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                      {onNavigateToCalls && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onClose();
-                            onNavigateToCalls();
-                          }}
-                          className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition-all"
-                        >
-                          <Video className="h-3.5 w-3.5 text-amber-400" />
-                          <span>👁️ Abrir Sala de Calls no Site</span>
-                        </button>
-                      )}
-
-                      {callUrl && (
-                        <a
-                          href={callUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center gap-2 rounded-xl border border-neutral-700 bg-neutral-800/80 py-2 text-xs font-bold text-neutral-200 hover:text-white hover:bg-neutral-700 transition-all"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5 text-neutral-400" />
-                          <span>Testar Link Externo ({platform})</span>
-                        </a>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Tab 2: IP Anti-Fraud & 14-Day Free Trials */}
+            {/* TAB 2: GESTÃO DE ALUNOS & EVOLUÇÃO (A CADA 55 XP) */}
+            {activeTab === 'student_evolution' && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 bg-neutral-950">
+                
+                {/* Evolution Banner: Rule of 55 XP */}
+                <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-neutral-900 to-orange-950/40 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-5 w-5 text-amber-400 animate-pulse" />
+                      <h4 className="font-display font-black text-sm text-white">
+                        Metodologia de Evolução: A cada 55 XP o Aluno Evolui
+                      </h4>
+                    </div>
+                    <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-black text-amber-300 border border-amber-500/40">
+                      55 XP = +1 Sub-Nível
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-300 leading-relaxed">
+                    Como professor, você pode calibrar a evolução do aluno, atribuir pontuações de batalha e liberar novos canais e beats diretamente por aqui.
+                  </p>
+                </div>
+
+                {/* Student Control Box */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-4">
+                  <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4 text-amber-400" />
+                    Ajustar Aluno Atual ({targetStudentName})
+                  </h4>
+
+                  {/* Name & XP Direct Fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
+                        Vulgo / Nome do MC:
+                      </label>
+                      <input
+                        type="text"
+                        value={targetStudentName}
+                        onChange={(e) => setTargetStudentName(e.target.value)}
+                        className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
+                        Total de XP do Aluno:
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="5"
+                        value={targetStudentXP}
+                        onChange={(e) => {
+                          const xp = Number(e.target.value) || 0;
+                          setTargetStudentXP(xp);
+                          setTargetStudentLevel(Math.max(1, Math.floor(xp / 55) + 1));
+                        }}
+                        className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-amber-300 focus:border-amber-500 focus:outline-none font-mono font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
+                        Nível Calculado (a cada 55 XP):
+                      </label>
+                      <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs text-amber-300 font-black">
+                        <span>Nível {Math.max(1, Math.floor(targetStudentXP / 55) + 1)}</span>
+                        <span className="text-[10px] text-neutral-400">
+                          {55 - (targetStudentXP % 55)} XP p/ próx.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick XP Award Chips */}
+                  <div className="space-y-2">
+                    <label className="block text-[11px] font-bold uppercase text-neutral-400">
+                      ⚡ Atribuir XP de Mentoria / Desafio Rápido:
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleAddXPBonus(55, '+1 Nível (55 XP)')}
+                        className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-neutral-950 hover:bg-amber-500/20 border border-neutral-800 hover:border-amber-500/50 text-xs font-bold text-amber-300 transition-all"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>+55 XP (1 Evolução)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAddXPBonus(110, 'Aprovado em 4 Compassos (+110 XP)')}
+                        className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-neutral-950 hover:bg-amber-500/20 border border-neutral-800 hover:border-amber-500/50 text-xs font-bold text-amber-300 transition-all"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>+110 XP (2 Evoluções)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAddXPBonus(220, 'Vitória em Duelo 1v1 (+220 XP)')}
+                        className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-neutral-950 hover:bg-orange-500/20 border border-neutral-800 hover:border-orange-500/50 text-xs font-bold text-orange-300 transition-all"
+                      >
+                        <Flame className="h-3.5 w-3.5" />
+                        <span>+220 XP (Duelo 1v1)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleAddXPBonus(330, 'Masterclass Concluída (+330 XP)')}
+                        className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-neutral-950 hover:bg-red-500/20 border border-neutral-800 hover:border-red-500/50 text-xs font-bold text-red-300 transition-all"
+                      >
+                        <Crown className="h-3.5 w-3.5" />
+                        <span>+330 XP (Masterclass)</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Channel Unlock Control */}
+                  <div className="space-y-2 pt-2 border-t border-neutral-800">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold uppercase text-neutral-400">
+                        🔓 Canais Liberados para o Aluno (Clique para ativar/desativar):
+                      </label>
+                      <span className="text-[10px] text-amber-400 font-bold">
+                        {unlockedChannelsList.length} canais ativos
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                      {AVAILABLE_CHANNELS.map((ch) => {
+                        const isUnlocked = unlockedChannelsList.includes(ch.id);
+                        return (
+                          <button
+                            key={ch.id}
+                            type="button"
+                            onClick={() => handleToggleChannelUnlock(ch.id)}
+                            className={`flex items-center justify-between p-2 rounded-xl border text-left text-xs font-bold transition-all ${
+                              isUnlocked
+                                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300'
+                                : 'bg-neutral-950 border-neutral-800 text-neutral-500 hover:text-neutral-400'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 truncate">
+                              <Hash className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{ch.name.replace('#', '')}</span>
+                            </div>
+                            <span className={`text-[9px] px-1 py-0.2 rounded font-black ${isUnlocked ? 'bg-amber-500 text-neutral-950' : 'bg-neutral-800 text-neutral-500'}`}>
+                              {isUnlocked ? '✓' : `${ch.minXP}xp`}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Teacher Feedback Note */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
+                      Observação / Feedback do Professor para o Aluno:
+                    </label>
+                    <input
+                      type="text"
+                      value={teacherFeedbackNote}
+                      onChange={(e) => setTeacherFeedbackNote(e.target.value)}
+                      placeholder="Ex: Excelente avanço em punchline e contagem de 4 compassos no boom bap!"
+                      className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Save Student Evolution Button */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveStudentEvolution}
+                      disabled={isSavingStudent}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 py-3 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {isSavingStudent ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      <span>Salvar Evolução & Atualizar Perfil do Aluno</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* TAB 3: IP TRIALS */}
             {activeTab === 'ip_trials' && (
-              <div className="space-y-4 animate-in fade-in duration-200">
-                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-5 space-y-4">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-neutral-950">
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                      <h4 className="font-bold text-sm text-white flex items-center gap-2">
                         <Globe className="h-4 w-4 text-amber-400" />
                         Sistema Anti-Fraude de IP & 14 Dias de Teste Grátis
-                      </h3>
+                      </h4>
                       <p className="text-xs text-neutral-400">
-                        O sistema vincula o período de 14 dias de teste ao endereço IP do usuário. Mesmo que ele use outro Gmail, o IP mantém a contagem regressiva original.
+                        O sistema vincula o período de 14 dias de teste ao endereço IP do usuário.
                       </p>
                     </div>
                     <button
@@ -856,7 +895,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     </button>
                   </div>
 
-                  {/* Summary Metric Cards */}
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800">
                       <span className="text-[10px] text-neutral-400 uppercase font-bold block">IPs Monitorados</span>
@@ -871,66 +909,23 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                       <strong className="text-lg font-black text-emerald-400">14 Dias / IP</strong>
                     </div>
                   </div>
-
-                  {/* IP Table */}
-                  <div className="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-950">
-                    <table className="w-full text-left text-xs">
-                      <thead className="border-b border-neutral-800 bg-neutral-900/80 text-[10px] font-black uppercase text-neutral-400">
-                        <tr>
-                          <th className="px-3 py-2.5">Endereço IP</th>
-                          <th className="px-3 py-2.5">Gmail do Aluno</th>
-                          <th className="px-3 py-2.5">Tempo Restante</th>
-                          <th className="px-3 py-2.5">Status do IP</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-neutral-900">
-                        {adminStats?.ipTrials && adminStats.ipTrials.length > 0 ? (
-                          adminStats.ipTrials.map((item: any, idx: number) => (
-                            <tr key={idx} className="hover:bg-neutral-900/40">
-                              <td className="px-3 py-2.5 font-mono text-neutral-300">{item.ip}</td>
-                              <td className="px-3 py-2.5 font-medium text-white">{item.lastEmail}</td>
-                              <td className="px-3 py-2.5">
-                                <span className={`font-bold ${item.isExpired ? 'text-red-400' : 'text-emerald-400'}`}>
-                                  {item.isExpired ? '0 dias (Expirado)' : `${item.daysRemaining} dias`}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  item.isExpired 
-                                    ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
-                                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                }`}>
-                                  {item.isExpired ? 'Bloqueado (Expirou)' : 'Ativo (14d Trial)'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={4} className="px-3 py-4 text-center text-neutral-500">
-                              Nenhum IP monitorado ainda. Os registros aparecerão conforme os alunos fizerem login com Gmail.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
                 </div>
               </div>
             )}
 
-            <div className="pt-3 border-t border-neutral-800 flex items-center justify-between text-xs text-neutral-400">
+            <div className="p-3 bg-neutral-950 border-t border-neutral-800 flex items-center justify-between text-xs text-neutral-400">
               <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                Modo Professor Ativo (Sessão Segura)
+                Painel do Prof Ativo (Kowalski & Luquita)
               </span>
               <button
                 onClick={handleLogout}
                 className="text-red-400 hover:underline font-semibold"
               >
-                Encerrar Acesso Admin
+                Encerrar Acesso Prof
               </button>
             </div>
+
           </div>
         )}
 
@@ -938,4 +933,3 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     </div>
   );
 };
-
