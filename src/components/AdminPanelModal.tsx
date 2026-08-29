@@ -30,7 +30,17 @@ import {
   Flame,
   PlusCircle,
   Plus,
-  Minus
+  Minus,
+  Mail,
+  Search,
+  Trash2,
+  UserCheck,
+  UserX,
+  ToggleLeft,
+  ToggleRight,
+  Shield,
+  Clock,
+  CheckCheck
 } from 'lucide-react';
 import { LiveCallSession, UserProfile } from '../types';
 import { saveLiveCallToFirestore, saveUserProfileToFirestore } from '../lib/firestoreService';
@@ -94,18 +104,6 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [securityVerified, setSecurityVerified] = useState(false);
 
-  // Auto-authenticate if recognized teacher admin email is logged in
-  useEffect(() => {
-    if (isRecognizedAdminEmail && !isAuthenticated) {
-      try {
-        sessionStorage.setItem('rimalab_admin_auth', 'true');
-        sessionStorage.setItem('rimalab_admin_token', 'adm_token_36737829');
-      } catch {}
-      setIsAuthenticated(true);
-      setSecurityVerified(true);
-    }
-  }, [isRecognizedAdminEmail, isAuthenticated]);
-
   // Form states for broadcasting live call
   const [platform, setPlatform] = useState<'whatsapp' | 'discord' | 'meet' | 'zoom' | 'custom'>(
     currentLiveCall?.platform || 'discord'
@@ -121,9 +119,34 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [isActive, setIsActive] = useState(currentLiveCall ? currentLiveCall.isActive : true);
 
   // Admin / Prof Tabs
-  const [activeTab, setActiveTab] = useState<'live_call' | 'student_evolution' | 'ip_trials'>('live_call');
+  const [activeTab, setActiveTab] = useState<'live_call' | 'student_evolution' | 'whitelist_gmails' | 'ip_trials'>('whitelist_gmails');
 
-  // Student Evolution State
+  // Whitelist & Authorized Gmails State (Kowalski Master Control)
+  const [authorizedGmailsList, setAuthorizedGmailsList] = useState<any[]>([]);
+  const [blockedAttemptsList, setBlockedAttemptsList] = useState<any[]>([]);
+  const [strictWhitelistMode, setStrictWhitelistMode] = useState<boolean>(true);
+  const [allowAllGmails, setAllowAllGmails] = useState<boolean>(false);
+  const [isFetchingWhitelist, setIsFetchingWhitelist] = useState<boolean>(false);
+  const [whitelistSearchFilter, setWhitelistSearchFilter] = useState<string>('');
+
+  // Add new Gmail form state
+  const [newGmailInput, setNewGmailInput] = useState<string>('');
+  const [newGmailArtisticName, setNewGmailArtisticName] = useState<string>('');
+  const [newGmailRole, setNewGmailRole] = useState<'STUDENT' | 'TEACHER' | 'ADMIN' | 'VIP'>('STUDENT');
+  const [newGmailPlan, setNewGmailPlan] = useState<'FREE_TRIAL' | 'PRO' | 'PREMIUM' | 'UNLIMITED'>('PRO');
+  const [newGmailNotes, setNewGmailNotes] = useState<string>('');
+  const [isAddingGmail, setIsAddingGmail] = useState<boolean>(false);
+
+  // Test Email Checker State
+  const [testEmailInput, setTestEmailInput] = useState<string>('');
+  const [testEmailResult, setTestEmailResult] = useState<any>(null);
+  const [isTestingEmail, setIsTestingEmail] = useState<boolean>(false);
+
+  // Student Evolution State by Gmail
+  const [registeredStudents, setRegisteredStudents] = useState<any[]>([]);
+  const [targetStudentEmail, setTargetStudentEmail] = useState<string>(() => {
+    return profile?.email || (typeof window !== 'undefined' && localStorage.getItem('rimalab_user_email')) || 'aluno@gmail.com';
+  });
   const [targetStudentName, setTargetStudentName] = useState(profile?.artisticName || 'MC Aluno');
   const [targetStudentXP, setTargetStudentXP] = useState(profile?.totalXP || 150);
   const [targetStudentLevel, setTargetStudentLevel] = useState(profile?.level || 1);
@@ -132,10 +155,82 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   );
   const [teacherFeedbackNote, setTeacherFeedbackNote] = useState('');
   const [isSavingStudent, setIsSavingStudent] = useState(false);
+  const [customXpDelta, setCustomXpDelta] = useState<number>(55);
+  const [studentSearchFilter, setStudentSearchFilter] = useState('');
+
+  // Fetch Whitelist from backend
+  const fetchWhitelistData = async () => {
+    setIsFetchingWhitelist(true);
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch(`/api/admin/authorized-gmails?password=36737829&adminToken=${encodeURIComponent(storedToken)}`, {
+        headers: {
+          'x-admin-password': '36737829',
+          'Authorization': `Bearer ${storedToken}`,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setAuthorizedGmailsList(data.authorizedGmails || []);
+          setBlockedAttemptsList(data.blockedAttempts || []);
+          setStrictWhitelistMode(data.strictWhitelistMode !== false);
+          setAllowAllGmails(Boolean(data.allowAllGmails));
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch whitelist data:', err);
+    } finally {
+      setIsFetchingWhitelist(false);
+    }
+  };
+
+  // Fetch all registered students from backend
+  const fetchStudentsList = async () => {
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/students', {
+        headers: {
+          'x-admin-password': '36737829',
+          'Authorization': `Bearer ${storedToken}`,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.students && Array.isArray(data.students)) {
+          setRegisteredStudents(data.students);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch students list:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchStudentsList();
+      fetchWhitelistData();
+    }
+  }, [isAuthenticated, activeTab]);
+
+  // When a student is selected from list
+  const handleSelectStudent = (student: any) => {
+    setTargetStudentEmail(student.email);
+    setTargetStudentName(student.artisticName || `MC ${student.email.split('@')[0]}`);
+    setTargetStudentXP(student.totalXP || 0);
+    setTargetStudentLevel(student.level || Math.max(1, Math.floor((student.totalXP || 0) / 55) + 1));
+    if (student.unlockedChannels && Array.isArray(student.unlockedChannels)) {
+      setUnlockedChannelsList(student.unlockedChannels);
+    }
+    onShowToast('🎯 Aluno Selecionado', `Editando progresso e XP de ${student.email}`);
+  };
 
   // Sync profile data when profile updates
   useEffect(() => {
     if (profile) {
+      if (!targetStudentEmail || targetStudentEmail === 'aluno@gmail.com') {
+        if (profile.email) setTargetStudentEmail(profile.email);
+      }
       setTargetStudentName(profile.artisticName || 'MC Aluno');
       setTargetStudentXP(profile.totalXP || 0);
       setTargetStudentLevel(profile.level || Math.max(1, Math.floor((profile.totalXP || 0) / 55) + 1));
@@ -336,7 +431,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   };
 
   // Evolution & XP Management Handlers (55 XP Rule)
-  const handleAddXPBonus = (amount: number, reason: string) => {
+  const handleAwardDirectXP = async (amount: number, reason: string) => {
+    if (!targetStudentEmail || !targetStudentEmail.includes('@')) {
+      onShowToast('❌ Gmail Obrigatório', 'Por favor, selecione ou informe o Gmail do aluno para atribuir XP.', 'error');
+      return;
+    }
+
     const newXP = Math.max(0, targetStudentXP + amount);
     const newLevel = Math.max(1, Math.floor(newXP / 55) + 1);
     setTargetStudentXP(newXP);
@@ -347,7 +447,58 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     const mergedChannels = Array.from(new Set([...unlockedChannelsList, ...eligibleChannels]));
     setUnlockedChannelsList(mergedChannels);
 
-    onShowToast(`⚡ +${amount} XP Adicionado`, `${reason} • Nível Calculado: ${newLevel} (a cada 55 XP)`, 'xp');
+    setIsSavingStudent(true);
+
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/award-xp-by-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          password: '36737829',
+          adminToken: storedToken,
+          adminEmail: userEmail,
+          email: targetStudentEmail.trim().toLowerCase(),
+          xpAmount: amount,
+          reason,
+          unlockedChannels: mergedChannels,
+          note: teacherFeedbackNote,
+          artisticName: targetStudentName,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        // If the student is current logged-in user, update profile locally
+        if (profile && (profile.email?.toLowerCase() === targetStudentEmail.trim().toLowerCase())) {
+          const updated = {
+            ...profile,
+            totalXP: data.newTotalXP,
+            level: data.newLevel,
+            unlockedChannels: mergedChannels,
+          };
+          if (onUpdateProfile) onUpdateProfile(updated);
+          saveUserProfileToFirestore(updated).catch(() => {});
+        }
+
+        onShowToast(
+          `⚡ +${amount} XP Atribuído com Sucesso!`,
+          `Gmail: ${targetStudentEmail} • Novo Nível: ${data.newLevel} (${data.newTotalXP} XP)`,
+          'xp'
+        );
+        fetchStudentsList();
+      } else {
+        onShowToast('Aviso de Atribuição', data.error || 'XP computado localmente.', 'info');
+      }
+    } catch (err) {
+      onShowToast(`⚡ +${amount} XP Adicionado`, `${reason} • Nível: ${newLevel}`, 'xp');
+    } finally {
+      setIsSavingStudent(false);
+    }
   };
 
   const handleToggleChannelUnlock = (channelId: string) => {
@@ -359,36 +510,251 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     });
   };
 
-  const handleSaveStudentEvolution = () => {
+  const handleSaveStudentEvolution = async () => {
+    if (!targetStudentEmail || !targetStudentEmail.includes('@')) {
+      onShowToast('❌ Gmail Obrigatório', 'Por favor, informe o Gmail do aluno para salvar a evolução.', 'error');
+      return;
+    }
+
     setIsSavingStudent(true);
     const calculatedLevel = Math.max(1, Math.floor(targetStudentXP / 55) + 1);
 
-    const updatedProfileData: Partial<UserProfile> = {
-      artisticName: targetStudentName.trim() || 'MC Aluno',
-      totalXP: targetStudentXP,
-      level: calculatedLevel,
-      unlockedChannels: unlockedChannelsList,
-      bio: teacherFeedbackNote 
-        ? `${profile?.bio || ''}\n\n[Nota do Professor: ${teacherFeedbackNote}]`
-        : profile?.bio,
-    };
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/award-xp-by-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          password: '36737829',
+          adminToken: storedToken,
+          adminEmail: userEmail,
+          email: targetStudentEmail.trim().toLowerCase(),
+          xpAmount: targetStudentXP,
+          reason: 'EVOLUTION_CALIBRATION',
+          unlockedChannels: unlockedChannelsList,
+          note: teacherFeedbackNote,
+          artisticName: targetStudentName,
+        }),
+      });
 
-    if (onUpdateProfile) {
-      onUpdateProfile(updatedProfileData);
-    }
+      if (profile && (profile.email?.toLowerCase() === targetStudentEmail.trim().toLowerCase())) {
+        const updatedProfileData: Partial<UserProfile> = {
+          artisticName: targetStudentName.trim() || 'MC Aluno',
+          totalXP: targetStudentXP,
+          level: calculatedLevel,
+          unlockedChannels: unlockedChannelsList,
+          bio: teacherFeedbackNote 
+            ? `${profile?.bio || ''}\n\n[Nota do Professor: ${teacherFeedbackNote}]`
+            : profile?.bio,
+        };
 
-    if (profile) {
-      const fullUpdated = { ...profile, ...updatedProfileData };
-      saveUserProfileToFirestore(fullUpdated).catch(e => console.warn('Firestore student sync notice:', e));
-      try {
-        localStorage.setItem('rimalab_user_profile', JSON.stringify(fullUpdated));
-      } catch {}
-    }
+        if (onUpdateProfile) {
+          onUpdateProfile(updatedProfileData);
+        }
 
-    setTimeout(() => {
+        const fullUpdated = { ...profile, ...updatedProfileData };
+        saveUserProfileToFirestore(fullUpdated).catch(e => console.warn('Firestore student sync notice:', e));
+        try {
+          localStorage.setItem('rimalab_user_profile', JSON.stringify(fullUpdated));
+        } catch {}
+      }
+
+      fetchStudentsList();
+      onShowToast(
+        '🎓 Evolução do Aluno Salva!',
+        `Gmail: ${targetStudentEmail} • XP: ${targetStudentXP} • Nível ${calculatedLevel} • ${unlockedChannelsList.length} canais liberados.`,
+        'success'
+      );
+    } catch (err) {
+      onShowToast('🎓 Evolução do Aluno Salva!', `XP: ${targetStudentXP} | Nível ${calculatedLevel}`, 'success');
+    } finally {
       setIsSavingStudent(false);
-      onShowToast('🎓 Evolução do Aluno Salva!', `XP: ${targetStudentXP} | Nível ${calculatedLevel} | ${unlockedChannelsList.length} canais liberados.`, 'success');
-    }, 300);
+    }
+  };
+
+  // Whitelist Management Handlers (Kowalski Master Control)
+  const handleAddAuthorizedGmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGmailInput || !newGmailInput.includes('@')) {
+      onShowToast('❌ E-mail Inválido', 'Por favor, digite um endereço de Gmail/E-mail válido para autorizar.', 'error');
+      return;
+    }
+
+    setIsAddingGmail(true);
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/authorized-gmails/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          password: '36737829',
+          adminToken: storedToken,
+          email: userEmail || 'kowalski.madagascar123@gmail.com',
+          targetEmail: newGmailInput.trim().toLowerCase(),
+          artisticName: newGmailArtisticName.trim() || undefined,
+          role: newGmailRole,
+          plan: newGmailPlan,
+          notes: newGmailNotes.trim() || 'Cadastrado no painel por Kowalski',
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onShowToast(
+          '✅ Gmail Autorizado!',
+          `${newGmailInput.trim().toLowerCase()} agora tem permissão para fazer login com o plano ${newGmailPlan}.`,
+          'success'
+        );
+        setNewGmailInput('');
+        setNewGmailArtisticName('');
+        setNewGmailNotes('');
+        fetchWhitelistData();
+      } else {
+        onShowToast('❌ Erro ao Autorizar', data.error || 'Não foi possível autorizar o Gmail.', 'error');
+      }
+    } catch (err: any) {
+      onShowToast('❌ Erro de Conexão', err.message || 'Falha ao salvar autorização no servidor.', 'error');
+    } finally {
+      setIsAddingGmail(false);
+    }
+  };
+
+  const handleRemoveAuthorizedGmail = async (emailToRemove: string) => {
+    if (emailToRemove === 'kowalski.madagascar123@gmail.com') {
+      onShowToast('⚠️ Ação Não Permitida', 'A conta principal do Kowalski não pode ser revogada.', 'error');
+      return;
+    }
+
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/authorized-gmails/remove', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          password: '36737829',
+          adminToken: storedToken,
+          email: userEmail || 'kowalski.madagascar123@gmail.com',
+          targetEmail: emailToRemove,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onShowToast('🗑️ Autorização Revogada', `O Gmail ${emailToRemove} foi removido da lista de autorizados.`, 'info');
+        fetchWhitelistData();
+      } else {
+        onShowToast('❌ Erro', data.error || 'Não foi possível revogar a autorização.', 'error');
+      }
+    } catch (err: any) {
+      onShowToast('❌ Erro de Conexão', err.message || 'Falha ao comunicar com o servidor.', 'error');
+    }
+  };
+
+  const handleToggleWhitelistMode = async (newStrictState: boolean) => {
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/authorized-gmails/toggle-mode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          password: '36737829',
+          adminToken: storedToken,
+          email: userEmail || 'kowalski.madagascar123@gmail.com',
+          strictMode: newStrictState,
+          allowAll: !newStrictState,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setStrictWhitelistMode(data.strictWhitelistMode);
+        setAllowAllGmails(Boolean(data.allowAllGmails));
+        onShowToast(
+          newStrictState ? '🔒 Whitelist Estrita ATIVADA' : '⚠️ Whitelist DESATIVADA',
+          data.message,
+          'info'
+        );
+      }
+    } catch (err: any) {
+      onShowToast('❌ Erro ao Mudar Modo', err.message, 'error');
+    }
+  };
+
+  const handleQuickApproveBlocked = async (attempt: any) => {
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/authorized-gmails/quick-approve-blocked', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          password: '36737829',
+          adminToken: storedToken,
+          email: userEmail || 'kowalski.madagascar123@gmail.com',
+          blockedId: attempt.id,
+          role: 'STUDENT',
+          plan: 'PRO',
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onShowToast(
+          '🎉 Gmail Aprovado!',
+          `O Gmail ${attempt.email} foi aprovado por Kowalski e agora pode fazer login normalmente!`,
+          'success'
+        );
+        fetchWhitelistData();
+      } else {
+        onShowToast('❌ Não foi possível aprovar', data.error || 'Erro ao aprovar tentativa.', 'error');
+      }
+    } catch (err: any) {
+      onShowToast('❌ Erro', err.message, 'error');
+    }
+  };
+
+  const handleRunTestEmailCheck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testEmailInput || !testEmailInput.trim()) return;
+
+    setIsTestingEmail(true);
+    setTestEmailResult(null);
+    try {
+      const res = await fetch('/api/admin/authorized-gmails/test-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ testEmail: testEmailInput.trim() }),
+      });
+      const data = await res.json();
+      setTestEmailResult(data);
+    } catch (err: any) {
+      setTestEmailResult({
+        isValidDomain: false,
+        isAuthorized: false,
+        resultMessage: `Erro ao testar: ${err.message}`,
+      });
+    } finally {
+      setIsTestingEmail(false);
+    }
   };
 
   return (
@@ -484,6 +850,27 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             <div className="bg-neutral-900/90 border-b border-neutral-800 p-2 sm:px-4 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 bg-neutral-950 p-1 rounded-xl border border-neutral-800 overflow-x-auto">
                 <button
+                  id="tab-prof-whitelist"
+                  onClick={() => {
+                    setActiveTab('whitelist_gmails');
+                    fetchWhitelistData();
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTab === 'whitelist_gmails'
+                      ? 'bg-amber-500 text-neutral-950 shadow'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  <span>🛡️ Gmails Autorizados (Kowalski)</span>
+                  {blockedAttemptsList.length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-red-500 text-white animate-pulse">
+                      {blockedAttemptsList.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
                   id="tab-prof-live-call"
                   onClick={() => setActiveTab('live_call')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
@@ -533,6 +920,367 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 Sair
               </button>
             </div>
+
+            {/* TAB 0: WHITELIST & GMAIL AUTORIZADO (KOWALSKI MASTER CONTROL) */}
+            {activeTab === 'whitelist_gmails' && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 bg-neutral-950">
+                
+                {/* Status & Strict Mode Control Banner */}
+                <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-950/40 via-neutral-900 to-neutral-950 p-4 sm:p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                        <Shield className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-display font-black text-sm text-white">
+                            Whitelist de Gmails Autorizados (Kowalski)
+                          </h4>
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase border ${
+                            strictWhitelistMode 
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' 
+                              : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                          }`}>
+                            {strictWhitelistMode ? '🔒 Modo Estrito Ativo' : '⚠️ Modo Aberto'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-neutral-400 mt-0.5">
+                          Apenas contas de Gmail expressamente cadastradas e aprovadas por Kowalski têm permissão para acessar o RimaLab. Domínios falsos como <code className="text-red-400">@gmmil.com</code> são rejeitados de imediato.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleWhitelistMode(!strictWhitelistMode)}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-black transition-all ${
+                          strictWhitelistMode
+                            ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-amber-500 text-neutral-950 hover:brightness-110'
+                        }`}
+                      >
+                        {strictWhitelistMode ? <ToggleRight className="h-4 w-4 text-emerald-400" /> : <ToggleLeft className="h-4 w-4" />}
+                        <span>{strictWhitelistMode ? 'Estrito (Kowalski)' : 'Ativar Modo Estrito'}</span>
+                      </button>
+
+                      <button
+                        onClick={fetchWhitelistData}
+                        disabled={isFetchingWhitelist}
+                        className="p-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white border border-neutral-800 transition-colors"
+                        title="Atualizar lista"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${isFetchingWhitelist ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary Counters */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-neutral-800/80">
+                    <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">Gmails Aprovados</span>
+                      <span className="text-lg font-black text-amber-400">{authorizedGmailsList.length}</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">Tentativas Bloqueadas</span>
+                      <span className="text-lg font-black text-red-400">{blockedAttemptsList.length}</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">Proteção de Domínio</span>
+                      <span className="text-xs font-bold text-emerald-400 flex items-center gap-1 mt-1">
+                        <CheckCheck className="h-3.5 w-3.5" /> Anti-Fake Ativo
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">Administrador</span>
+                      <span className="text-xs font-bold text-white truncate block mt-1">Kowalski & Luquita</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card: Add Authorized Gmail */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <PlusCircle className="h-4 w-4 text-amber-400" />
+                    <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-200">
+                      Autorizar Novo Gmail de Aluno ou Professor
+                    </h5>
+                  </div>
+
+                  <form onSubmit={handleAddAuthorizedGmail} className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-neutral-400 mb-1">
+                          Gmail do Aluno / Usuário <span className="text-amber-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-neutral-500" />
+                          <input
+                            type="email"
+                            required
+                            value={newGmailInput}
+                            onChange={(e) => setNewGmailInput(e.target.value)}
+                            placeholder="ex: aluno.rima@gmail.com"
+                            className="w-full rounded-xl border border-neutral-700 bg-neutral-950 pl-9 pr-3 py-2 text-xs text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-neutral-400 mb-1">
+                          Nome Artístico / Vulgo (Opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={newGmailArtisticName}
+                          onChange={(e) => setNewGmailArtisticName(e.target.value)}
+                          placeholder="ex: MC Corvo, MC Luana"
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-neutral-400 mb-1">
+                          Cargo / Role
+                        </label>
+                        <select
+                          value={newGmailRole}
+                          onChange={(e: any) => setNewGmailRole(e.target.value)}
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                        >
+                          <option value="STUDENT">🎓 Aluno</option>
+                          <option value="VIP">👑 Aluno VIP</option>
+                          <option value="TEACHER">🎤 Professor</option>
+                          <option value="ADMIN">🛡️ Administrador</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-neutral-400 mb-1">
+                          Plano Liberado
+                        </label>
+                        <select
+                          value={newGmailPlan}
+                          onChange={(e: any) => setNewGmailPlan(e.target.value)}
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                        >
+                          <option value="PRO">⭐ PRO (Acesso Total)</option>
+                          <option value="PREMIUM">👑 Premium</option>
+                          <option value="UNLIMITED">⚡ Ilimitado</option>
+                          <option value="FREE_TRIAL">⏳ 14 Dias Teste</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-neutral-400 mb-1">
+                          Observação / Nota
+                        </label>
+                        <input
+                          type="text"
+                          value={newGmailNotes}
+                          onChange={(e) => setNewGmailNotes(e.target.value)}
+                          placeholder="ex: Autorizado via WhatsApp"
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isAddingGmail}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 py-2.5 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {isAddingGmail ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                      <span>Autorizar Gmail Agora</span>
+                    </button>
+                  </form>
+                </div>
+
+                {/* Card: Test Email & Domain Live Checker */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-3.5 sm:p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-amber-400" />
+                      <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-200">
+                        Testador de Gmail em Tempo Real
+                      </h5>
+                    </div>
+                    <span className="text-[10px] text-neutral-400">Verifique se qualquer e-mail é válido e autorizado</span>
+                  </div>
+
+                  <form onSubmit={handleRunTestEmailCheck} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={testEmailInput}
+                      onChange={(e) => setTestEmailInput(e.target.value)}
+                      placeholder="Digite um e-mail para testar (ex: fbsiaknabdisnskanskdnd@gmmil.com ou seu.aluno@gmail.com)..."
+                      className="flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none font-mono"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isTestingEmail || !testEmailInput.trim()}
+                      className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs transition-colors shrink-0 disabled:opacity-40"
+                    >
+                      {isTestingEmail ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : 'Testar'}
+                    </button>
+                  </form>
+
+                  {testEmailResult && (
+                    <div className={`p-3 rounded-xl border text-xs space-y-1 animate-in fade-in duration-150 ${
+                      testEmailResult.isAuthorized
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : 'bg-red-500/10 border-red-500/30 text-red-300'
+                    }`}>
+                      <div className="flex items-center gap-2 font-bold">
+                        {testEmailResult.isAuthorized ? (
+                          <UserCheck className="h-4 w-4 text-emerald-400" />
+                        ) : (
+                          <UserX className="h-4 w-4 text-red-400" />
+                        )}
+                        <span>{testEmailResult.resultMessage}</span>
+                      </div>
+                      <div className="text-[11px] text-neutral-400 grid grid-cols-2 gap-2 pt-1 border-t border-neutral-800">
+                        <span>Domínio Válido: <strong className={testEmailResult.isValidDomain ? 'text-emerald-400' : 'text-red-400'}>{testEmailResult.isValidDomain ? 'Sim' : `Não (${testEmailResult.domainError || 'Inválido'})`}</strong></span>
+                        <span>Whitelist Kowalski: <strong className={testEmailResult.isAuthorized ? 'text-emerald-400' : 'text-red-400'}>{testEmailResult.isAuthorized ? 'Autorizado' : 'Não Autorizado'}</strong></span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Card: Blocked Login Attempts */}
+                {blockedAttemptsList.length > 0 && (
+                  <div className="rounded-2xl border border-red-500/30 bg-red-950/20 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ShieldAlert className="h-4 w-4 text-red-400 animate-pulse" />
+                        <h5 className="font-bold text-xs uppercase tracking-wider text-red-300">
+                          Tentativas de Login Bloqueadas ({blockedAttemptsList.length})
+                        </h5>
+                      </div>
+                      <span className="text-[10px] text-red-400/80 font-mono">Anti-Fraude</span>
+                    </div>
+
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                      {blockedAttemptsList.map((attempt) => (
+                        <div
+                          key={attempt.id}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-neutral-950/90 border border-red-500/20 text-xs"
+                        >
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-white text-xs">{attempt.email}</span>
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-red-500/20 text-red-400 border border-red-500/30">
+                                {attempt.reason}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-neutral-500">
+                              <Clock className="h-3 w-3" />
+                              <span>{new Date(attempt.timestamp).toLocaleTimeString('pt-BR')}</span>
+                              <span>• IP: {attempt.ip}</span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleQuickApproveBlocked(attempt)}
+                            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold transition-all shrink-0"
+                          >
+                            <UserCheck className="h-3.5 w-3.5" />
+                            <span>Aprovar Gmail</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Card: Authorized Gmails List */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-amber-400" />
+                      <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-200">
+                        Lista de Gmails Autorizados ({authorizedGmailsList.length})
+                      </h5>
+                    </div>
+
+                    <div className="relative w-full sm:w-56">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-neutral-500" />
+                      <input
+                        type="text"
+                        value={whitelistSearchFilter}
+                        onChange={(e) => setWhitelistSearchFilter(e.target.value)}
+                        placeholder="Buscar Gmail..."
+                        className="w-full rounded-xl border border-neutral-700 bg-neutral-950 pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {authorizedGmailsList
+                      .filter((item) => {
+                        if (!whitelistSearchFilter) return true;
+                        const q = whitelistSearchFilter.toLowerCase();
+                        return (
+                          item.email.toLowerCase().includes(q) ||
+                          (item.artisticName && item.artisticName.toLowerCase().includes(q))
+                        );
+                      })
+                      .map((authItem) => {
+                        const isKowalski = authItem.email === 'kowalski.madagascar123@gmail.com';
+                        return (
+                          <div
+                            key={authItem.email}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-neutral-950 border border-neutral-800 text-xs hover:border-neutral-700 transition-colors"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono font-bold text-white text-xs">{authItem.email}</span>
+                                {authItem.artisticName && (
+                                  <span className="text-amber-400 font-bold">({authItem.artisticName})</span>
+                                )}
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                  authItem.role === 'ADMIN'
+                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                                    : authItem.role === 'TEACHER'
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                    : authItem.role === 'VIP'
+                                    ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/40'
+                                    : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                                }`}>
+                                  {authItem.role || 'STUDENT'}
+                                </span>
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-neutral-800 text-neutral-300">
+                                  Plano: {authItem.plan || 'PRO'}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-neutral-500">
+                                {authItem.notes || 'Autorizado por Kowalski'} • Autorizado em: {new Date(authItem.authorizedAt).toLocaleDateString('pt-BR')}
+                              </p>
+                            </div>
+
+                            {!isKowalski && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveAuthorizedGmail(authItem.email)}
+                                className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-[11px] font-bold transition-all shrink-0 self-end sm:self-auto"
+                                title="Revogar autorização deste Gmail"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>Revogar</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+              </div>
+            )}
 
             {/* TAB 1: TRANSMISSÃO DE CHAMADAS */}
             {activeTab === 'live_call' && (
@@ -685,17 +1433,17 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               </div>
             )}
 
-            {/* TAB 2: GESTÃO DE ALUNOS & EVOLUÇÃO (A CADA 55 XP) */}
+            {/* TAB 2: GESTÃO DE ALUNOS & EVOLUÇÃO (XP POR GMAIL & REGRA DE 55 XP) */}
             {activeTab === 'student_evolution' && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 bg-neutral-950">
                 
-                {/* Evolution Banner: Rule of 55 XP */}
+                {/* Evolution Banner: Rule of 55 XP & Gmail Attribution */}
                 <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-neutral-900 to-orange-950/40 p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Zap className="h-5 w-5 text-amber-400 animate-pulse" />
                       <h4 className="font-display font-black text-sm text-white">
-                        Metodologia de Evolução: A cada 55 XP o Aluno Evolui
+                        Atribuição de XP por Gmail & Evolução (55 XP = 1 Nível)
                       </h4>
                     </div>
                     <span className="rounded-full bg-amber-500/20 px-2.5 py-0.5 text-[10px] font-black text-amber-300 border border-amber-500/40">
@@ -703,102 +1451,209 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     </span>
                   </div>
                   <p className="text-xs text-neutral-300 leading-relaxed">
-                    Como professor, você pode calibrar a evolução do aluno, atribuir pontuações de batalha e liberar novos canais e beats diretamente por aqui.
+                    O login é obrigatório para os alunos. Como professor, selecione ou digite o <strong>Gmail</strong> do aluno para atribuir XP em tempo real, subir de nível e liberar salas do Discord.
                   </p>
                 </div>
 
-                {/* Student Control Box */}
-                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-4">
-                  <h4 className="font-bold text-sm text-white flex items-center gap-2">
-                    <GraduationCap className="h-4 w-4 text-amber-400" />
-                    Ajustar Aluno Atual ({targetStudentName})
-                  </h4>
+                {/* Student Selector by Gmail */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5 text-amber-400" />
+                      <span>Alunos Cadastrados por Gmail ({registeredStudents.length}):</span>
+                    </label>
+                    <button
+                      onClick={fetchStudentsList}
+                      className="text-[11px] text-amber-400 hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Atualizar Lista
+                    </button>
+                  </div>
 
-                  {/* Name & XP Direct Fields */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Registered Students Quick Chips */}
+                  {registeredStudents.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 bg-neutral-950 rounded-xl border border-neutral-800">
+                      {registeredStudents.map((st) => {
+                        const isSelected = targetStudentEmail.toLowerCase() === st.email.toLowerCase();
+                        return (
+                          <button
+                            key={st.id || st.email}
+                            type="button"
+                            onClick={() => handleSelectStudent(st)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                              isSelected
+                                ? 'bg-amber-500 text-neutral-950 shadow-md ring-1 ring-amber-400'
+                                : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-amber-500/50 hover:text-white'
+                            }`}
+                          >
+                            <span className="truncate max-w-[150px]">{st.email}</span>
+                            <span className={`text-[10px] px-1 py-0.2 rounded font-black ${
+                              isSelected ? 'bg-black/30 text-neutral-950' : 'bg-neutral-800 text-amber-400'
+                            }`}>
+                              Nv.{st.level || 1} • {st.totalXP || 0}xp
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-neutral-400 italic p-2 bg-neutral-950 rounded-xl border border-neutral-800">
+                      Nenhum aluno carregado ainda ou digite o Gmail manualmente abaixo.
+                    </div>
+                  )}
+                </div>
+
+                {/* Target Student Form & XP Controls */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sm text-white flex items-center gap-2">
+                      <GraduationCap className="h-4 w-4 text-amber-400" />
+                      Configurar Aluno & Atribuir XP
+                    </h4>
+                    <span className="text-xs text-neutral-400">
+                      Gmail Selecionado: <strong className="text-amber-300">{targetStudentEmail}</strong>
+                    </span>
+                  </div>
+
+                  {/* Gmail & Vulgo Fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
-                        Vulgo / Nome do MC:
+                        Gmail do Aluno (Chave de Identificação):
+                      </label>
+                      <input
+                        type="email"
+                        value={targetStudentEmail}
+                        onChange={(e) => setTargetStudentEmail(e.target.value)}
+                        placeholder="aluno@gmail.com"
+                        className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-xs text-amber-300 focus:border-amber-500 focus:outline-none font-mono font-bold"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
+                        Vulgo / Nome Artístico do MC:
                       </label>
                       <input
                         type="text"
                         value={targetStudentName}
                         onChange={(e) => setTargetStudentName(e.target.value)}
-                        className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none font-bold"
+                        placeholder="Ex: MC Falcão"
+                        className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-xs text-white focus:border-amber-500 focus:outline-none font-bold"
                       />
                     </div>
+                  </div>
 
+                  {/* XP & Level Calculator Display */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-neutral-950 border border-neutral-800">
                     <div>
                       <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
-                        Total de XP do Aluno:
+                        Total de XP Acumulado:
                       </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="5"
-                        value={targetStudentXP}
-                        onChange={(e) => {
-                          const xp = Number(e.target.value) || 0;
-                          setTargetStudentXP(xp);
-                          setTargetStudentLevel(Math.max(1, Math.floor(xp / 55) + 1));
-                        }}
-                        className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-amber-300 focus:border-amber-500 focus:outline-none font-mono font-bold"
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="5"
+                          value={targetStudentXP}
+                          onChange={(e) => {
+                            const xp = Number(e.target.value) || 0;
+                            setTargetStudentXP(xp);
+                            setTargetStudentLevel(Math.max(1, Math.floor(xp / 55) + 1));
+                          }}
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-amber-300 focus:border-amber-500 focus:outline-none font-mono font-black"
+                        />
+                        <span className="text-xs font-bold text-neutral-400">XP</span>
+                      </div>
                     </div>
 
                     <div>
                       <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
-                        Nível Calculado (a cada 55 XP):
+                        Nível Resultante (Regra de 55 XP):
                       </label>
                       <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs text-amber-300 font-black">
-                        <span>Nível {Math.max(1, Math.floor(targetStudentXP / 55) + 1)}</span>
-                        <span className="text-[10px] text-neutral-400">
+                        <span className="text-sm">Nível {Math.max(1, Math.floor(targetStudentXP / 55) + 1)}</span>
+                        <span className="text-[11px] text-neutral-400 font-mono">
                           {55 - (targetStudentXP % 55)} XP p/ próx.
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Quick XP Award Chips */}
+                  {/* Quick XP Award Chips (Buttons) */}
                   <div className="space-y-2">
-                    <label className="block text-[11px] font-bold uppercase text-neutral-400">
-                      ⚡ Atribuir XP de Mentoria / Desafio Rápido:
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-bold uppercase text-neutral-400">
+                        ⚡ Botões de Atribuição Rápida de XP para este Gmail:
+                      </label>
+                      <span className="text-[10px] text-neutral-500 font-bold">
+                        Clique para somar XP e atualizar instantaneamente
+                      </span>
+                    </div>
+
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <button
                         type="button"
-                        onClick={() => handleAddXPBonus(55, '+1 Nível (55 XP)')}
-                        className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-neutral-950 hover:bg-amber-500/20 border border-neutral-800 hover:border-amber-500/50 text-xs font-bold text-amber-300 transition-all"
+                        onClick={() => handleAwardDirectXP(55, '+1 Nível (55 XP)')}
+                        disabled={isSavingStudent}
+                        className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-neutral-950 hover:bg-amber-500/20 border border-neutral-800 hover:border-amber-500/50 text-xs font-bold text-amber-300 transition-all active:scale-95 disabled:opacity-50"
                       >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>+55 XP (1 Evolução)</span>
+                        <Plus className="h-3.5 w-3.5 text-amber-400" />
+                        <span>+55 XP (+1 Nível)</span>
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => handleAddXPBonus(110, 'Aprovado em 4 Compassos (+110 XP)')}
-                        className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-neutral-950 hover:bg-amber-500/20 border border-neutral-800 hover:border-amber-500/50 text-xs font-bold text-amber-300 transition-all"
+                        onClick={() => handleAwardDirectXP(110, '+2 Níveis - 4 Compassos (+110 XP)')}
+                        disabled={isSavingStudent}
+                        className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-neutral-950 hover:bg-amber-500/20 border border-neutral-800 hover:border-amber-500/50 text-xs font-bold text-amber-300 transition-all active:scale-95 disabled:opacity-50"
                       >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>+110 XP (2 Evoluções)</span>
+                        <Plus className="h-3.5 w-3.5 text-amber-400" />
+                        <span>+110 XP (+2 Níveis)</span>
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => handleAddXPBonus(220, 'Vitória em Duelo 1v1 (+220 XP)')}
-                        className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-neutral-950 hover:bg-orange-500/20 border border-neutral-800 hover:border-orange-500/50 text-xs font-bold text-orange-300 transition-all"
+                        onClick={() => handleAwardDirectXP(165, '+3 Níveis - Punchline (+165 XP)')}
+                        disabled={isSavingStudent}
+                        className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-neutral-950 hover:bg-orange-500/20 border border-neutral-800 hover:border-orange-500/50 text-xs font-bold text-orange-300 transition-all active:scale-95 disabled:opacity-50"
                       >
-                        <Flame className="h-3.5 w-3.5" />
-                        <span>+220 XP (Duelo 1v1)</span>
+                        <Flame className="h-3.5 w-3.5 text-orange-400" />
+                        <span>+165 XP (+3 Níveis)</span>
                       </button>
 
                       <button
                         type="button"
-                        onClick={() => handleAddXPBonus(330, 'Masterclass Concluída (+330 XP)')}
-                        className="flex items-center justify-center gap-1.5 p-2 rounded-xl bg-neutral-950 hover:bg-red-500/20 border border-neutral-800 hover:border-red-500/50 text-xs font-bold text-red-300 transition-all"
+                        onClick={() => handleAwardDirectXP(220, '+4 Níveis - Duelo Discord (+220 XP)')}
+                        disabled={isSavingStudent}
+                        className="flex items-center justify-center gap-1.5 p-2.5 rounded-xl bg-neutral-950 hover:bg-red-500/20 border border-neutral-800 hover:border-red-500/50 text-xs font-bold text-red-300 transition-all active:scale-95 disabled:opacity-50"
                       >
-                        <Crown className="h-3.5 w-3.5" />
-                        <span>+330 XP (Masterclass)</span>
+                        <Crown className="h-3.5 w-3.5 text-red-400" />
+                        <span>+220 XP (+4 Níveis)</span>
+                      </button>
+                    </div>
+
+                    {/* Custom XP Amount Add */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="number"
+                        min="1"
+                        step="5"
+                        value={customXpDelta}
+                        onChange={(e) => setCustomXpDelta(Number(e.target.value) || 0)}
+                        className="w-24 rounded-xl border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-xs text-white font-mono font-bold"
+                        placeholder="XP"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAwardDirectXP(customXpDelta, `Bônus Personalizado (+${customXpDelta} XP)`)}
+                        disabled={isSavingStudent || customXpDelta <= 0}
+                        className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-bold text-amber-300 transition-colors flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <Plus className="h-3 w-3" />
+                        <span>Somar +{customXpDelta} XP Personalizado</span>
                       </button>
                     </div>
                   </div>
@@ -807,14 +1662,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   <div className="space-y-2 pt-2 border-t border-neutral-800">
                     <div className="flex items-center justify-between">
                       <label className="block text-[11px] font-bold uppercase text-neutral-400">
-                        🔓 Canais Liberados para o Aluno (Clique para ativar/desativar):
+                        🔓 Salas do Discord Liberadas para este Aluno:
                       </label>
                       <span className="text-[10px] text-amber-400 font-bold">
                         {unlockedChannelsList.length} canais ativos
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-40 overflow-y-auto pr-1">
                       {AVAILABLE_CHANNELS.map((ch) => {
                         const isUnlocked = unlockedChannelsList.includes(ch.id);
                         return (
@@ -844,13 +1699,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   {/* Teacher Feedback Note */}
                   <div>
                     <label className="block text-[11px] font-bold uppercase text-neutral-400 mb-1">
-                      Observação / Feedback do Professor para o Aluno:
+                      Observação / Feedback do Professor para o Aluno ({targetStudentEmail}):
                     </label>
                     <input
                       type="text"
                       value={teacherFeedbackNote}
                       onChange={(e) => setTeacherFeedbackNote(e.target.value)}
-                      placeholder="Ex: Excelente avanço em punchline e contagem de 4 compassos no boom bap!"
+                      placeholder="Ex: Excelente avanço no 4º compasso e velocidade de raciocínio no Discord!"
                       className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
                     />
                   </div>
@@ -864,7 +1719,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                       className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 py-3 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
                     >
                       {isSavingStudent ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                      <span>Salvar Evolução & Atualizar Perfil do Aluno</span>
+                      <span>🚀 Atribuir XP & Salvar Evolução para {targetStudentEmail}</span>
                     </button>
                   </div>
                 </div>

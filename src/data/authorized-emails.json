@@ -1,0 +1,27 @@
+{
+  "strictWhitelistMode": true,
+  "allowAllGmails": false,
+  "authorizedGmails": [
+    {
+      "email": "kowalski.madagascar123@gmail.com",
+      "artisticName": "Kowalski MC",
+      "role": "ADMIN",
+      "plan": "UNLIMITED",
+      "authorizedBy": "Sistema Mestre",
+      "authorizedAt": "2026-01-01T00:00:00.000Z",
+      "status": "ACTIVE",
+      "notes": "Conta Mestre do Administrador e Fundador do RimaLab"
+    },
+    {
+      "email": "ravel.macedo@escola.pr.gov.br",
+      "artisticName": "Prof. Ravel Macedo",
+      "role": "TEACHER",
+      "plan": "UNLIMITED",
+      "authorizedBy": "Kowalski MC",
+      "authorizedAt": "2026-01-01T00:00:00.000Z",
+      "status": "ACTIVE",
+      "notes": "Coordenador Pedagógico e Professor Oficial"
+    }
+  ],
+  "blockedAttempts": []
+}

@@ -837,7 +837,7 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                 </div>
               )}
 
-              {/* Tab 2: AI Judge Demo */}
+              {/* Tab 2: AI Judge Demo (Interactive Live Simulator) */}
               {activeDemoTab === 'ai_judge' && (
                 <div className="space-y-3 animate-in fade-in duration-200">
                   <div className="p-3.5 rounded-xl border border-amber-500/40 bg-neutral-950 text-xs space-y-2">
@@ -850,15 +850,15 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                         NOTA: 8.8 / 10
                       </span>
                     </div>
-                    <p className="text-neutral-300 leading-relaxed">
-                      "Excelente encaixe nos contratempos do compasso 4/4. A punchline final surpreendeu, mas cuide da respiração no final do 3º verso para não perder o ataque."
+                    <p className="text-neutral-300 leading-relaxed text-[11px]">
+                      "Excelente encaixe nos contratempos do compasso 4/4. A rima rica <strong>faca / rima rara / mente para</strong> surpreendeu na punchline final. Mantenha a respiração no 3º verso para atacar com máxima pressão."
                     </p>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center text-xs">
                     <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800">
                       <span className="text-[10px] text-neutral-400 uppercase font-bold block">Métrica</span>
-                      <strong className="text-amber-400 text-sm">9.2 / 10</strong>
+                      <strong className="text-amber-400 text-sm">9.4 / 10</strong>
                     </div>
                     <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800">
                       <span className="text-[10px] text-neutral-400 uppercase font-bold block">Punchline</span>
@@ -866,7 +866,20 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                     </div>
                     <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800">
                       <span className="text-[10px] text-neutral-400 uppercase font-bold block">Velocidade</span>
-                      <strong className="text-red-400 text-sm">138 WPM</strong>
+                      <strong className="text-emerald-400 text-sm">138 WPM</strong>
+                    </div>
+                  </div>
+
+                  {/* Multisyllabic breakdown chip demo */}
+                  <div className="p-2 rounded-xl bg-neutral-950 border border-neutral-800/80 text-[10px] space-y-1">
+                    <span className="text-neutral-400 font-bold block">🔬 Rimas Multissilábicas Detectadas:</span>
+                    <div className="flex flex-wrap gap-1">
+                      <span className="bg-amber-500/15 border border-amber-500/40 text-amber-300 px-1.5 py-0.5 rounded">
+                        métrica corta a faca ↔ rima rara
+                      </span>
+                      <span className="bg-purple-500/15 border border-purple-500/40 text-purple-300 px-1.5 py-0.5 rounded">
+                        mente para ↔ no compasso dispara
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -885,12 +898,46 @@ export const OnboardingLanding: React.FC<OnboardingLandingProps> = ({
                         HD 1080p
                       </span>
                     </div>
-                    <p className="text-neutral-300 leading-relaxed">
-                      Grave seus vídeos de batalha com visualização de câmera integrada, sugestão de palavras difíceis em tempo real no metrônomo e exportação para redes sociais.
+                    <p className="text-neutral-300 leading-relaxed text-[11px]">
+                      Grave seus vídeos de batalha com visualização de câmera integrada, sugestão de palavras difíceis em tempo real no metrônomo, geração de cartões virais para Instagram Stories/TikTok e duelos assíncronos 1v1.
                     </p>
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Free vs PRO Transparency Card */}
+            <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
+                  💎 O que é Grátis vs PRO no RimaLab:
+                </span>
+                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                  14 Dias Grátis com Gmail
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className="p-2 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <span className="font-bold text-white block">🌱 Plano Grátis:</span>
+                  <ul className="text-neutral-400 space-y-0.5 text-[10px]">
+                    <li>✓ 3 Beats Essenciais de Treino</li>
+                    <li>✓ Metrônomo e Gravador de Áudio</li>
+                    <li>✓ Análise e Pontuação Básica</li>
+                    <li>✓ 14 Dias de Teste Completo</li>
+                  </ul>
+                </div>
+
+                <div className="p-2 rounded-lg bg-gradient-to-b from-amber-950/30 to-neutral-900 border border-amber-500/30 space-y-1">
+                  <span className="font-bold text-amber-400 block">👑 Plano PRO:</span>
+                  <ul className="text-amber-200/90 space-y-0.5 text-[10px]">
+                    <li>★ Todos os Beats Exclusivos (Detroit, Grime, Drill)</li>
+                    <li>★ 3 Personalidades de Jurados IA (Kowalski, BDA)</li>
+                    <li>★ Duelos 1v1 Assíncronos & Cards Stories</li>
+                    <li>★ 2x XP no Ranking Semanal & Geral</li>
+                  </ul>
+                </div>
+              </div>
             </div>
 
             {/* Bottom Join CTA */}

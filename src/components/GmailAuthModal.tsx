@@ -117,7 +117,7 @@ export const GmailAuthModal: React.FC<GmailAuthModalProps> = ({
           </p>
         </div>
 
-        {/* IP Recognition Banner */}
+        {/* IP Recognition & Security Banner */}
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/90 p-4 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1.5 font-bold text-neutral-200">
@@ -131,7 +131,7 @@ export const GmailAuthModal: React.FC<GmailAuthModalProps> = ({
           <p className="text-[11px] text-neutral-400 flex items-start gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
             <span>
-              <strong>Sistema Anti-Fraude de IP:</strong> Seu teste gratuito de 14 dias fica vinculado ao seu dispositivo para garantir que seu progresso e histórico fiquem seguros.
+              <strong>Sistema Anti-Fraude & Whitelist Kowalski:</strong> Apenas contas de Gmail reais e autorizadas por Kowalski têm acesso liberado à plataforma.
             </span>
           </p>
         </div>

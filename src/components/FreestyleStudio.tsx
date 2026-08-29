@@ -30,13 +30,17 @@ import {
   Share2,
   RefreshCw,
   Headphones,
-  Bot
+  Bot,
+  Swords,
+  Crown as CrownIcon
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Beat, RhymeAnalysis, UserProfile, BattleTrainingType, SkillFocusType } from '../types';
+import { Beat, RhymeAnalysis, UserProfile, BattleTrainingType, SkillFocusType, AIJudgePersonality } from '../types';
 import { PRESET_BEATS, globalBeatEngine } from '../lib/audio/beatEngine';
 import { SpeechHandler } from '../lib/speech/speechRecognition';
 import { aiVoiceTutor } from '../lib/speech/aiVoiceTutor';
+import { ViralCardShareModal } from './ViralCardShareModal';
+import { AsyncDuelModal } from './AsyncDuelModal';
 
 interface FreestyleStudioProps {
   profile: UserProfile | null;
@@ -108,9 +112,14 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
   const [lastSpokenWord, setLastSpokenWord] = useState<string>('');
   const [lastAudioBlob, setLastAudioBlob] = useState<Blob | null>(null);
 
-  // AI Voice Coach (Modo GPT Voz ao Vivo)
+  // AI Voice Coach (Modo GPT Voz ao Vivo) & Jurado
   const [autoVoiceCoach, setAutoVoiceCoach] = useState<boolean>(true);
   const [isVoiceSpeaking, setIsVoiceSpeaking] = useState<boolean>(false);
+  const [judgePersonality, setJudgePersonality] = useState<AIJudgePersonality>('kowalski_rigido');
+
+  // Viral Card & Async Duel Modals State
+  const [isShareCardModalOpen, setIsShareCardModalOpen] = useState<boolean>(false);
+  const [isAsyncDuelModalOpen, setIsAsyncDuelModalOpen] = useState<boolean>(false);
 
   // Camera & Visual Stage State
   const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
@@ -487,6 +496,7 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
           trainingType,
           focusSkills,
           userAge: mcAge,
+          judgePersonality,
         }),
       });
 
@@ -1498,6 +1508,54 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
               </button>
             </div>
 
+            {/* AI Judge Personality Selector */}
+            <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5">
+                  <CrownIcon className="h-3.5 w-3.5" />
+                  Personalidade do Jurado IA:
+                </span>
+                <span className="text-[10px] text-neutral-400 font-medium">
+                  {judgePersonality === 'kowalski_rigido' ? 'Rígido & Técnico' : judgePersonality === 'jurado_bda' ? 'Ataque & Punchline' : 'Evolução & Flow'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setJudgePersonality('kowalski_rigido')}
+                  className={`p-1.5 rounded-lg text-[10px] font-bold border transition-all text-center ${
+                    judgePersonality === 'kowalski_rigido'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500 shadow-sm'
+                      : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white'
+                  }`}
+                >
+                  👑 Kowalski Sem Filtro
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJudgePersonality('jurado_bda')}
+                  className={`p-1.5 rounded-lg text-[10px] font-bold border transition-all text-center ${
+                    judgePersonality === 'jurado_bda'
+                      ? 'bg-red-500/20 text-red-300 border-red-500 shadow-sm'
+                      : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white'
+                  }`}
+                >
+                  🩸 Jurado BDA / Sangue
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setJudgePersonality('coach_construtivo')}
+                  className={`p-1.5 rounded-lg text-[10px] font-bold border transition-all text-center ${
+                    judgePersonality === 'coach_construtivo'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500 shadow-sm'
+                      : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:text-white'
+                  }`}
+                >
+                  🧠 Coach Flow & Métrica
+                </button>
+              </div>
+            </div>
+
             {/* Action to Analyze */}
             <button
               id="studio-analyze-btn"
@@ -1554,13 +1612,34 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 px-3.5 py-2">
-                  <Award className="h-5 w-5 text-amber-400" />
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-black text-amber-400">XP Conquistado</span>
-                    <p className="text-sm font-black text-white">
-                      +{Math.round(analysisResult.overallScore * 2.5)} XP
-                    </p>
+                {/* Viral Share & Duel Actions Header Buttons */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsShareCardModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold text-xs shadow-lg shadow-purple-500/20 active:scale-95 transition-all"
+                    title="Gerar card visual para Stories/Instagram/TikTok"
+                  >
+                    <Share2 className="h-3.5 w-3.5" />
+                    <span>Card Stories</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsAsyncDuelModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs shadow-lg shadow-red-500/20 active:scale-95 transition-all"
+                    title="Desafiar amigo para responder seu verso"
+                  >
+                    <Swords className="h-3.5 w-3.5" />
+                    <span>Desafiar 1v1</span>
+                  </button>
+
+                  <div className="flex items-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-1.5">
+                    <Award className="h-4 w-4 text-amber-400" />
+                    <div className="text-right">
+                      <span className="text-[9px] uppercase font-black text-amber-400 block">XP</span>
+                      <p className="text-xs font-black text-white">
+                        +{Math.round(analysisResult.overallScore * 2.5)}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1628,7 +1707,7 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5 font-bold text-amber-400">
                       <Sparkles className="h-3.5 w-3.5" />
-                      <span>Visão do Jurado (Direto ao Ponto):</span>
+                      <span>Visão do Jurado ({judgePersonality === 'kowalski_rigido' ? 'Kowalski' : judgePersonality === 'jurado_bda' ? 'Jurado Sangue' : 'Coach Flow'}):</span>
                     </div>
                     <span className="text-[10px] font-semibold text-neutral-400">Análise Real</span>
                   </div>
@@ -1803,6 +1882,30 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
                 )}
               </div>
 
+              {/* Bottom Share & Challenge Banner */}
+              <div className="p-3 rounded-xl bg-gradient-to-r from-purple-950/40 via-neutral-950 to-amber-950/40 border border-purple-500/30 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="text-xs">
+                  <span className="font-black text-white block">Orgulhoso da sua rima?</span>
+                  <span className="text-[11px] text-neutral-400">Gere um card para seu Instagram ou desafie um MC!</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsShareCardModalOpen(true)}
+                    className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-xs flex items-center gap-1.5 shadow"
+                  >
+                    <Share2 className="h-3 w-3" />
+                    <span>Compartilhar Card</span>
+                  </button>
+                  <button
+                    onClick={() => setIsAsyncDuelModalOpen(true)}
+                    className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-red-600 to-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow"
+                  >
+                    <Swords className="h-3 w-3" />
+                    <span>Desafiar Amigo</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Recommended Next Exercise */}
               {analysisResult.nextExercise && (
                 <div className="pt-2 border-t border-neutral-800 text-xs text-neutral-300 flex items-center justify-between">
@@ -1816,6 +1919,30 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
 
         </div>
       </div>
+
+      {/* Viral Card Share Modal */}
+      {isShareCardModalOpen && (
+        <ViralCardShareModal
+          isOpen={isShareCardModalOpen}
+          onClose={() => setIsShareCardModalOpen(false)}
+          profile={profile}
+          beat={currentBeat}
+          lyrics={transcript}
+          analysis={analysisResult}
+        />
+      )}
+
+      {/* Async Duel Modal */}
+      {isAsyncDuelModalOpen && (
+        <AsyncDuelModal
+          isOpen={isAsyncDuelModalOpen}
+          onClose={() => setIsAsyncDuelModalOpen(false)}
+          profile={profile}
+          currentBeat={currentBeat}
+          currentLyrics={transcript}
+          currentAnalysis={analysisResult}
+        />
+      )}
     </div>
   );
 };

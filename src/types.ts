@@ -221,6 +221,8 @@ export interface Achievement {
   progress?: number;
 }
 
+export type AIJudgePersonality = 'kowalski_rigido' | 'jurado_bda' | 'coach_construtivo';
+
 export interface Beat {
   id: string;
   title: string;
@@ -234,4 +236,68 @@ export interface Beat {
   source?: 'synth' | 'custom' | 'youtube' | 'stream';
   thumbnailUrl?: string;
   durationFormatted?: string;
+  isPro?: boolean;
 }
+
+export interface TeacherAccessRequest {
+  id: string;
+  email: string;
+  fullName: string;
+  artisticName?: string;
+  discipline: string;
+  phoneOrWhatsapp?: string;
+  discordUser?: string;
+  motivation?: string;
+  experience?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  approvedBy?: string;
+  token: string;
+  rejectToken: string;
+  notes?: string;
+}
+
+export interface TeacherProfile {
+  id: string;
+  email: string;
+  fullName: string;
+  artisticName: string;
+  discipline: string;
+  isMaster: boolean;
+  avatarUrl?: string;
+  bio?: string;
+  phoneOrWhatsapp?: string;
+  discordUser?: string;
+  authorizedAt: string;
+}
+
+export interface AuthorizedGmail {
+  email: string;
+  artisticName: string;
+  role: 'STUDENT' | 'TEACHER' | 'ADMIN' | 'VIP';
+  plan: 'FREE_TRIAL' | 'PRO' | 'PREMIUM' | 'UNLIMITED';
+  authorizedBy: string;
+  authorizedAt: string;
+  status: 'ACTIVE' | 'REVOKED';
+  notes?: string;
+}
+
+export interface BlockedLoginAttempt {
+  id: string;
+  email: string;
+  artisticName?: string;
+  ip: string;
+  attemptedAt: string;
+  reason: string;
+  status: 'BLOCKED' | 'APPROVED_LATER';
+}
+
+export interface WhitelistSettings {
+  strictWhitelistMode: boolean;
+  allowAllGmails: boolean;
+  authorizedGmails: AuthorizedGmail[];
+  blockedAttempts: BlockedLoginAttempt[];
+}
+

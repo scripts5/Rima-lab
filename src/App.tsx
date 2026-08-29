@@ -46,6 +46,9 @@ import {
   AdminPanelModal 
 } from './components/AdminPanelModal';
 import { 
+  TeacherPortalModal 
+} from './components/TeacherPortalModal';
+import { 
   KowalskiStudioModal 
 } from './components/KowalskiStudioModal';
 import { 
@@ -157,6 +160,7 @@ export function App() {
   const [isSubscriptionOpen, setIsSubscriptionOpen] = useState<boolean>(false);
   const [isPromptGenOpen, setIsPromptGenOpen] = useState<boolean>(false);
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
+  const [isTeacherPortalOpen, setIsTeacherPortalOpen] = useState<boolean>(false);
   const [isKowalskiStudioOpen, setIsKowalskiStudioOpen] = useState<boolean>(false);
   const [isGmailAuthOpen, setIsGmailAuthOpen] = useState<boolean>(false);
   const [isVoiceCoachOpen, setIsVoiceCoachOpen] = useState<boolean>(false);
@@ -703,7 +707,7 @@ export function App() {
             liveCall={liveCall}
             onOpenSubscription={() => setIsSubscriptionOpen(true)}
             onOpenPromptGen={() => setIsPromptGenOpen(true)}
-            onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenAdmin={() => setIsTeacherPortalOpen(true)}
             onOpenStudioConfig={() => setIsKowalskiStudioOpen(true)}
             onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
             onOpenVoiceCoach={() => setIsVoiceCoachOpen(true)}
@@ -814,7 +818,7 @@ export function App() {
             }}
             currentBeat={currentBeat}
             onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
-            onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenAdmin={() => setIsTeacherPortalOpen(true)}
             onOpenStudioConfig={() => setIsKowalskiStudioOpen(true)}
             onOpenSubscription={() => setIsSubscriptionOpen(true)}
           />
@@ -859,7 +863,7 @@ export function App() {
             liveCall={liveCall}
             profile={profile}
             subscription={subscription}
-            onOpenAdmin={() => setIsAdminOpen(true)}
+            onOpenAdmin={() => setIsTeacherPortalOpen(true)}
             onOpenSubscription={() => setIsSubscriptionOpen(true)}
             onOpenStudio={() => setActiveTab('studio')}
             onOpenVoiceCoach={() => setIsVoiceCoachOpen(true)}
@@ -983,6 +987,15 @@ export function App() {
             setIsPlayingBeat(true);
           }
         }}
+      />
+
+      <TeacherPortalModal
+        isOpen={isTeacherPortalOpen}
+        onClose={() => setIsTeacherPortalOpen(false)}
+        profile={profile}
+        onShowToast={showToast}
+        currentLiveCall={liveCall}
+        onUpdateLiveCall={handleUpdateLiveCall}
       />
 
       <AdminPanelModal

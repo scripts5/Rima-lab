@@ -1,0 +1,31 @@
+{
+  "brandName": "Academia de Rimas",
+  "brandSub": "Por Kowalski MC & Luquita MC",
+  "heroTitle": "Domine o Freestyle & as Batalhas de Rima",
+  "heroHighlightWord": "Freestyle",
+  "heroSubtitle": "Treine improviso, speed flow e punchlines com sintetizador de beats em tempo real, bot estilo Discord com comandos /play e avaliação técnica direta ao ponto feita por IA jurado profissional.",
+  "heroGradient": "amber-orange-red",
+  "ctaButtonText": "Entrar no Estúdio de Gravação",
+  "announcementBanner": {
+    "enabled": false,
+    "text": "🎤 Aula Especial de Speed Flow hoje com Kowalski MC & Luquita MC às 20h!",
+    "badge": "NOVIDADE",
+    "linkUrl": "",
+    "style": "amber"
+  },
+  "globalAlert": {
+    "enabled": false,
+    "title": "🏆 Batalha Semanal RimaLab",
+    "message": "Participe do torneio de freestyle no Discord e dispute a vaga no pódio!",
+    "type": "hype",
+    "buttonText": "Ver Detalhes",
+    "buttonLink": ""
+  },
+  "accentColor": "amber",
+  "topTickerText": "🎤 Luquita MC & ⚡ Kowalski MC • Mestres da Rima, Métrica & Inteligência Artificial",
+  "customCss": "",
+  "customHtmlSnippet": "",
+  "footerMessage": "RimaLab Academy • Transformando MCs em Máquinas de Freestyle com IA e Hip-Hop Brasileiro",
+  "lastUpdated": "2026-08-28T18:00:00.000Z",
+  "updatedBy": "Sistema"
+}

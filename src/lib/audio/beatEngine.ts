@@ -72,6 +72,7 @@ export const PRESET_BEATS: Beat[] = [
     description: 'Sintetizador cortante, kicks agressivos e ritmo frenético para treinar ataque e punchlines.',
     source: 'synth',
     durationFormatted: '03:00',
+    isPro: true,
   },
   {
     id: 'beat_detroit_pure_808',
@@ -84,6 +85,7 @@ export const PRESET_BEATS: Beat[] = [
     description: 'Acordes secos e rápidos de piano, sub 808 cortante e bateria de Detroit sincopada para flow fora do tempo e punchline pesada.',
     source: 'synth',
     durationFormatted: '02:55',
+    isPro: true,
   },
   {
     id: 'beat_detroit_punch',
@@ -96,6 +98,7 @@ export const PRESET_BEATS: Beat[] = [
     description: 'Linha de flauta contínua, bumbo solto e rimas no contratempo características do flow clássico de Detroit.',
     source: 'synth',
     durationFormatted: '02:50',
+    isPro: true,
   },
   {
     id: 'beat_cypher_underground',

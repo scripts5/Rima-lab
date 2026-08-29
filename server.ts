@@ -1,6 +1,7 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type, Modality } from '@google/genai';
 import type { LiveServerMessage } from '@google/genai';
@@ -86,6 +87,230 @@ interface IPTrialRecord {
   trialExpiresAt: number;
   totalLogins: number;
 }
+
+// Authorized Master Admin emails
+const ADMIN_EMAILS = [
+  'kowalski.madagascar123@gmail.com',
+  'ravel.macedo@escola.pr.gov.br',
+];
+
+// --- Whitelist & Authorized Gmails System (Managed by Kowalski in Admin Panel) ---
+interface AuthorizedGmailRecord {
+  email: string;
+  artisticName: string;
+  role: 'STUDENT' | 'TEACHER' | 'ADMIN' | 'VIP';
+  plan: 'FREE_TRIAL' | 'PRO' | 'PREMIUM' | 'UNLIMITED';
+  authorizedBy: string;
+  authorizedAt: string;
+  status: 'ACTIVE' | 'REVOKED';
+  notes?: string;
+}
+
+interface BlockedLoginAttemptRecord {
+  id: string;
+  email: string;
+  artisticName?: string;
+  ip: string;
+  attemptedAt: string;
+  reason: string;
+  status: 'BLOCKED' | 'APPROVED_LATER';
+}
+
+const AUTHORIZED_EMAILS_FILE = path.join(process.cwd(), 'src', 'data', 'authorized-emails.json');
+
+let strictWhitelistMode = true;
+let allowAllGmails = false;
+const authorizedGmails = new Map<string, AuthorizedGmailRecord>();
+const blockedLoginAttempts: BlockedLoginAttemptRecord[] = [];
+
+// Function to load whitelist from file
+function loadWhitelistFromFile() {
+  try {
+    if (fs.existsSync(AUTHORIZED_EMAILS_FILE)) {
+      const raw = fs.readFileSync(AUTHORIZED_EMAILS_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      if (typeof data.strictWhitelistMode === 'boolean') {
+        strictWhitelistMode = data.strictWhitelistMode;
+      }
+      if (typeof data.allowAllGmails === 'boolean') {
+        allowAllGmails = data.allowAllGmails;
+      }
+      if (Array.isArray(data.authorizedGmails)) {
+        authorizedGmails.clear();
+        for (const item of data.authorizedGmails) {
+          if (item && item.email) {
+            authorizedGmails.set(item.email.trim().toLowerCase(), {
+              email: item.email.trim().toLowerCase(),
+              artisticName: item.artisticName || `MC ${item.email.split('@')[0]}`,
+              role: item.role || 'STUDENT',
+              plan: item.plan || 'PRO',
+              authorizedBy: item.authorizedBy || 'Kowalski MC (Master)',
+              authorizedAt: item.authorizedAt || new Date().toISOString(),
+              status: item.status || 'ACTIVE',
+              notes: item.notes || '',
+            });
+          }
+        }
+      }
+      if (Array.isArray(data.blockedAttempts)) {
+        blockedLoginAttempts.length = 0;
+        blockedLoginAttempts.push(...data.blockedAttempts.slice(0, 50));
+      }
+    }
+  } catch (err) {
+    console.warn('[WHITELIST LOAD WARNING]', err);
+  }
+
+  // Ensure Kowalski is ALWAYS present and active
+  if (!authorizedGmails.has('kowalski.madagascar123@gmail.com')) {
+    authorizedGmails.set('kowalski.madagascar123@gmail.com', {
+      email: 'kowalski.madagascar123@gmail.com',
+      artisticName: 'Kowalski MC',
+      role: 'ADMIN',
+      plan: 'UNLIMITED',
+      authorizedBy: 'Sistema Mestre',
+      authorizedAt: '2026-01-01T00:00:00.000Z',
+      status: 'ACTIVE',
+      notes: 'Conta Mestre do Administrador e Fundador',
+    });
+  }
+
+  if (!authorizedGmails.has('ravel.macedo@escola.pr.gov.br')) {
+    authorizedGmails.set('ravel.macedo@escola.pr.gov.br', {
+      email: 'ravel.macedo@escola.pr.gov.br',
+      artisticName: 'Prof. Ravel Macedo',
+      role: 'TEACHER',
+      plan: 'UNLIMITED',
+      authorizedBy: 'Kowalski MC',
+      authorizedAt: '2026-01-01T00:00:00.000Z',
+      status: 'ACTIVE',
+      notes: 'Coordenador Pedagógico Oficial',
+    });
+  }
+}
+
+// Function to save whitelist to file
+function saveWhitelistToFile() {
+  try {
+    const data = {
+      strictWhitelistMode,
+      allowAllGmails,
+      authorizedGmails: Array.from(authorizedGmails.values()),
+      blockedAttempts: blockedLoginAttempts.slice(0, 50),
+    };
+    fs.writeFileSync(AUTHORIZED_EMAILS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[WHITELIST SAVE ERROR]', err);
+  }
+}
+
+// Email format and typo domain validator
+function validateEmailDomain(email: string): { valid: boolean; reason?: string } {
+  if (!email || typeof email !== 'string') return { valid: false, reason: 'E-mail vazio.' };
+  const trimmed = email.trim().toLowerCase();
+  
+  // Basic RFC regex
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(trimmed)) {
+    return { valid: false, reason: 'Formato de e-mail inválido.' };
+  }
+
+  const parts = trimmed.split('@');
+  if (parts.length !== 2) return { valid: false, reason: 'E-mail inválido.' };
+  const domain = parts[1];
+
+  // Common typo domains
+  const bannedTypoDomains = ['gmmil.com', 'gmaill.com', 'gmial.com', 'gamil.com', 'gmai.com', 'gmaik.com', 'gmal.com', 'gmaii.com', 'hotmial.com', 'yaho.com'];
+  if (bannedTypoDomains.includes(domain)) {
+    return { valid: false, reason: `Domínio de e-mail inválido ou inexistente (@${domain}). Você quis dizer @gmail.com?` };
+  }
+
+  return { valid: true };
+}
+
+// Helper to check if email is authorized by Kowalski
+function isEmailAuthorizedByKowalski(email: string): boolean {
+  const norm = String(email || '').trim().toLowerCase();
+  if (!norm || !norm.includes('@')) return false;
+
+  // Master Admin is ALWAYS authorized
+  if (ADMIN_EMAILS.includes(norm) || norm === 'kowalski.madagascar123@gmail.com') return true;
+
+  // If strict mode is disabled, all valid emails are allowed
+  if (!strictWhitelistMode || allowAllGmails) return true;
+
+  // Check in authorizedGmails map
+  const record = authorizedGmails.get(norm);
+  if (record && record.status === 'ACTIVE') return true;
+
+  return false;
+}
+
+// Load initial whitelist
+loadWhitelistFromFile();
+
+// --- Teacher Access & Approval Engine ---
+interface TeacherAccessRequest {
+  id: string;
+  email: string;
+  fullName: string;
+  artisticName?: string;
+  discipline: string;
+  phoneOrWhatsapp?: string;
+  discordUser?: string;
+  motivation?: string;
+  experience?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requestedAt: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  approvedBy?: string;
+  token: string;
+  rejectToken: string;
+  notes?: string;
+}
+
+interface TeacherProfile {
+  id: string;
+  email: string;
+  fullName: string;
+  artisticName: string;
+  discipline: string;
+  isMaster: boolean;
+  avatarUrl?: string;
+  bio?: string;
+  phoneOrWhatsapp?: string;
+  discordUser?: string;
+  authorizedAt: string;
+}
+
+const teacherAccessRequests = new Map<string, TeacherAccessRequest>();
+const authorizedTeachers = new Map<string, TeacherProfile>();
+
+// Pre-seed Master Teachers
+authorizedTeachers.set('kowalski.madagascar123@gmail.com', {
+  id: 'teacher_kowalski',
+  email: 'kowalski.madagascar123@gmail.com',
+  fullName: 'Kowalski MC',
+  artisticName: 'Kowalski MC (Mestre Fundador)',
+  discipline: 'Métrica & Freestyle de Batalha',
+  isMaster: true,
+  avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=kowalski',
+  bio: 'Criador do RimaLab Academy, mestre de improviso, velocidade e punchlines.',
+  authorizedAt: '2026-01-01T00:00:00Z',
+});
+
+authorizedTeachers.set('ravel.macedo@escola.pr.gov.br', {
+  id: 'teacher_ravel',
+  email: 'ravel.macedo@escola.pr.gov.br',
+  fullName: 'Prof. Ravel Macedo',
+  artisticName: 'Prof. Ravel Macedo',
+  discipline: 'Pedagogia & Rima Ideológica',
+  isMaster: true,
+  avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=ravel',
+  bio: 'Coordenador pedagógico oficial e mentor de rima e literatura.',
+  authorizedAt: '2026-01-01T00:00:00Z',
+});
 
 interface LiveCallState {
   id: string;
@@ -375,16 +600,64 @@ async function startServer() {
     res.json({ status: 'ok', time: new Date().toISOString(), service: 'RimaLab Core SaaS API' });
   });
 
-  // Auth: Gmail Login with 14-Day Free Trial & IP Checking
+  // Auth: Gmail Login with Strict Whitelist & 14-Day Free Trial
   app.post('/api/auth/gmail', (req, res) => {
     try {
       const { email, artisticName, favoriteStyle } = req.body;
-      if (!email || !email.includes('@')) {
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
         return res.status(400).json({ error: 'Por favor, insira um endereço de Gmail/E-mail válido.' });
       }
 
       const clientIp = getClientIp(req);
       const normalizedEmail = email.trim().toLowerCase();
+
+      // 1. Strict Domain & Typo Validation (blocks typos like @gmmil.com, @gmaill.com)
+      const domainCheck = validateEmailDomain(normalizedEmail);
+      if (!domainCheck.valid) {
+        const attempt: BlockedLoginAttemptRecord = {
+          id: `blk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          email: normalizedEmail,
+          artisticName: artisticName?.trim() || `MC ${normalizedEmail.split('@')[0]}`,
+          ip: clientIp,
+          attemptedAt: new Date().toISOString(),
+          reason: domainCheck.reason || 'Domínio de e-mail com erro ou inexistente',
+          status: 'BLOCKED',
+        };
+        blockedLoginAttempts.unshift(attempt);
+        saveWhitelistToFile();
+
+        return res.status(400).json({
+          error: `❌ Domínio de e-mail inválido (@${normalizedEmail.split('@')[1] || ''}). ${domainCheck.reason}`,
+          isBlocked: true,
+          email: normalizedEmail,
+        });
+      }
+
+      // 2. Strict Whitelist Check (Only emails authorized by Kowalski are allowed to login)
+      const isApproved = isEmailAuthorizedByKowalski(normalizedEmail);
+      if (!isApproved && strictWhitelistMode) {
+        const attempt: BlockedLoginAttemptRecord = {
+          id: `blk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          email: normalizedEmail,
+          artisticName: artisticName?.trim() || `MC ${normalizedEmail.split('@')[0]}`,
+          ip: clientIp,
+          attemptedAt: new Date().toISOString(),
+          reason: 'Gmail não autorizado pelo Administrador Kowalski',
+          status: 'BLOCKED',
+        };
+        blockedLoginAttempts.unshift(attempt);
+        saveWhitelistToFile();
+
+        console.warn(`[SECURITY / WHITELIST BLOCKED] Login barrado: ${normalizedEmail} (IP: ${clientIp})`);
+
+        return res.status(403).json({
+          error: `❌ Acesso Não Autorizado: O Gmail '${normalizedEmail}' não possui autorização do Kowalski. Apenas contas aprovadas no Painel Admin podem fazer login.`,
+          isBlocked: true,
+          email: normalizedEmail,
+          help: 'Entre em contato com o Kowalski no e-mail kowalski.madagascar123@gmail.com para solicitar a liberação do seu Gmail.',
+        });
+      }
+
       const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
       const now = Date.now();
 
@@ -880,29 +1153,135 @@ async function startServer() {
     });
   });
 
-  // Authorized Master Admin emails
-  const ADMIN_EMAILS = [
-    'kowalski.madagascar123@gmail.com',
-    'ravel.macedo@escola.pr.gov.br',
-  ];
+  // Recent dispatched email notifications history for transparency
+  interface DispatchedTeacherEmail {
+    id: string;
+    targetEmail: string; // kowalski.madagascar123@gmail.com
+    candidateEmail: string;
+    candidateName: string;
+    subject: string;
+    approveUrl: string;
+    rejectUrl: string;
+    sentAt: string;
+    previewSnippet: string;
+  }
 
-  // Helper to check admin authorization
+  const dispatchedTeacherEmails: DispatchedTeacherEmail[] = [];
+
+  // Helper to send approval email to Kowalski's Gmail
+  const sendTeacherApprovalEmailToKowalski = async (
+    reqObj: TeacherAccessRequest,
+    baseUrl: string
+  ) => {
+    const targetAdminGmail = 'kowalski.madagascar123@gmail.com';
+    const approveUrl = `${baseUrl}/api/teachers/approve?token=${encodeURIComponent(reqObj.token)}&email=${encodeURIComponent(reqObj.email)}`;
+    const rejectUrl = `${baseUrl}/api/teachers/reject?token=${encodeURIComponent(reqObj.rejectToken)}&email=${encodeURIComponent(reqObj.email)}`;
+
+    const subject = `🎓 Nova Solicitação de Professor no RimaLab: ${reqObj.fullName} (${reqObj.email})`;
+
+    console.log(`\n=============================================================`);
+    console.log(`📬 [GMAIL DISPATCH] ENVIANDO E-MAIL PARA O KOWALSKI (${targetAdminGmail})`);
+    console.log(`Assunto: ${subject}`);
+    console.log(`Candidato(a): ${reqObj.fullName} (${reqObj.email})`);
+    console.log(`Matéria/Especialidade: ${reqObj.discipline}`);
+    console.log(`WhatsApp/Discord: ${reqObj.phoneOrWhatsapp || reqObj.discordUser || 'Não informado'}`);
+    console.log(`Motivo: ${reqObj.motivation || 'Sem motivo'}`);
+    console.log(`-------------------------------------------------------------`);
+    console.log(`🔗 LINK DE APROVAÇÃO DIRETA (1-CLIQUE NO GMAIL):`);
+    console.log(`   ${approveUrl}`);
+    console.log(`🔗 LINK DE RECUSA:`);
+    console.log(`   ${rejectUrl}`);
+    console.log(`=============================================================\n`);
+
+    dispatchedTeacherEmails.unshift({
+      id: `mail_${Date.now()}`,
+      targetEmail: targetAdminGmail,
+      candidateEmail: reqObj.email,
+      candidateName: reqObj.fullName,
+      subject,
+      approveUrl,
+      rejectUrl,
+      sentAt: new Date().toISOString(),
+      previewSnippet: `Solicitação de ${reqObj.fullName} para lecionar ${reqObj.discipline}.`,
+    });
+
+    // If SMTP credentials exist in environment, attempt real SMTP delivery
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      try {
+        const nodemailer = await import('nodemailer');
+        const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          },
+        });
+
+        const htmlBody = `
+          <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0a0a0a; color: #ededed; padding: 24px; border-radius: 12px; max-width: 600px; margin: 0 auto; border: 1px solid #262626;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h1 style="color: #f59e0b; margin: 0; font-size: 24px; letter-spacing: -0.5px;">🎤 RimaLab Academy</h1>
+              <p style="color: #a3a3a3; font-size: 13px; margin-top: 4px;">Sistema de Gestão & Autorização de Professores</p>
+            </div>
+            
+            <div style="background-color: #171717; padding: 20px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px;">
+              <h2 style="color: #ffffff; font-size: 18px; margin-top: 0;">🎓 Nova Solicitação de Acesso de Professor</h2>
+              <p style="color: #d4d4d4; font-size: 14px; line-height: 1.5;">
+                Olá, <strong>Kowalski</strong>! Um novo professor solicitou autorização para lecionar e acessar o Painel de Professores da Academia de Rimas.
+              </p>
+              <hr style="border: 0; border-top: 1px solid #262626; margin: 16px 0;" />
+              
+              <p style="margin: 6px 0; font-size: 14px;"><strong>Nome Completo:</strong> ${reqObj.fullName}</p>
+              <p style="margin: 6px 0; font-size: 14px;"><strong>E-mail (Gmail):</strong> <span style="color: #fbbf24;">${reqObj.email}</span></p>
+              <p style="margin: 6px 0; font-size: 14px;"><strong>Especialidade / Matéria:</strong> ${reqObj.discipline}</p>
+              ${reqObj.phoneOrWhatsapp ? `<p style="margin: 6px 0; font-size: 14px;"><strong>WhatsApp / Telefone:</strong> ${reqObj.phoneOrWhatsapp}</p>` : ''}
+              ${reqObj.discordUser ? `<p style="margin: 6px 0; font-size: 14px;"><strong>Usuário Discord:</strong> ${reqObj.discordUser}</p>` : ''}
+              ${reqObj.motivation ? `<p style="margin: 12px 0 6px 0; font-size: 14px;"><strong>Motivação / Experiência:</strong><br/><span style="color: #a3a3a3; font-style: italic;">"${reqObj.motivation}"</span></p>` : ''}
+            </div>
+
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${approveUrl}" style="display: inline-block; background-color: #f59e0b; color: #0a0a0a; font-weight: bold; font-size: 15px; padding: 14px 28px; text-decoration: none; border-radius: 8px; margin-right: 10px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);">
+                ✅ PERMITIR ACESSO DO PROFESSOR
+              </a>
+              <a href="${rejectUrl}" style="display: inline-block; background-color: #262626; color: #ef4444; font-weight: bold; font-size: 14px; padding: 14px 20px; text-decoration: none; border-radius: 8px; border: 1px solid #404040;">
+                ❌ Recusar
+              </a>
+            </div>
+
+            <p style="color: #737373; font-size: 12px; text-align: center; margin-top: 24px;">
+              Este e-mail foi gerado automaticamente pelo servidor RimaLab para <strong>kowalski.madagascar123@gmail.com</strong>.
+            </p>
+          </div>
+        `;
+
+        await transporter.sendMail({
+          from: `"RimaLab Academy" <${process.env.SMTP_USER}>`,
+          to: targetAdminGmail,
+          subject,
+          html: htmlBody,
+        });
+        console.log(`[GMAIL SMTP] E-mail entregue com sucesso para ${targetAdminGmail}!`);
+      } catch (smtpErr) {
+        console.warn('[GMAIL SMTP WARNING] Erro no envio SMTP (usando link de aprovação direta):', smtpErr);
+      }
+    }
+  };
+
+  // Helper to check admin authorization (Strict: Master Password 36737829, Token adm_token_36737829 or authorized teacher)
   const isAuthorizedAdmin = (pwd?: string, token?: string, email?: string): boolean => {
     const cleanPwd = String(pwd || '').trim().replace(/[\s\-_'"]/g, '');
     const cleanToken = String(token || '').trim();
     const cleanEmail = String(email || '').trim().toLowerCase();
 
-    const isPasswordMatch = 
-      cleanPwd === '36737829' || 
-      cleanPwd.toLowerCase() === '36737829' || 
-      cleanPwd.includes('36737829') || 
-      cleanPwd.toLowerCase() === 'admin' || 
-      cleanPwd.toLowerCase() === 'rimalab';
-    const isTokenMatch = cleanToken === 'adm_token_36737829' || cleanToken.startsWith('adm_');
-    const isEmailMatch = ADMIN_EMAILS.some(ae => ae.toLowerCase() === cleanEmail || ae.toLowerCase() === cleanPwd.toLowerCase());
+    // STRICT: Only master password 36737829 or adm_token_36737829 or recognized master admin
+    const isPasswordMatch = cleanPwd === '36737829';
+    const isTokenMatch = cleanToken === 'adm_token_36737829';
+    const isMasterEmailWithToken = (ADMIN_EMAILS.includes(cleanEmail) || authorizedTeachers.has(cleanEmail)) && 
+      (cleanToken === 'adm_token_36737829' || cleanPwd === '36737829' || cleanToken.startsWith('adm_') || cleanToken.startsWith('prof_'));
 
-    return isPasswordMatch || isTokenMatch || isEmailMatch;
+    return isPasswordMatch || isTokenMatch || isMasterEmailWithToken;
   };
+
 
   // --- Admin Endpoints (Password Protected: 36737829 or Authorized Gmail) ---
   app.post(['/api/admin/login', '/api/admin/verify-security', '/api/admin/verify'], (req, res) => {
@@ -922,22 +1301,874 @@ async function startServer() {
         success: true,
         authorized: true,
         adminToken: 'adm_token_36737829',
-        adminName: 'Professores (Kowalski MC & Luquita MC)',
+        adminName: 'Kowalski MC & Luquita MC (Mestres)',
         role: 'ADMIN',
-        permissions: ['EDIT_CALL_LINK', 'BROADCAST_LIVE', 'VIEW_METRICS', 'MANAGE_TRIALS'],
+        permissions: ['EDIT_CALL_LINK', 'BROADCAST_LIVE', 'VIEW_METRICS', 'MANAGE_TRIALS', 'SITE_CUSTOMIZATION'],
         message: 'Acesso Mestre Concedido e Verificado! Bem-vindo ao painel de administração.',
       });
     } else {
       res.status(401).json({ 
         success: false, 
         authorized: false,
-        error: 'Verificação de segurança falhou. Senha incorreta ou e-mail não autorizado.' 
+        error: 'Verificação de segurança falhou. Acesso restrito com a senha mestre de Administrador.' 
       });
     }
   });
 
+  // Test SMTP Gmail Dispatch Endpoint
+  app.post('/api/admin/test-smtp', async (req, res) => {
+    const { password, adminToken, email, targetEmail } = req.body || {};
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+    const givenPwd = password || pwdHeader;
+    const givenToken = adminToken || tokenHeader || tokenFromAuth;
+    const givenEmail = email || emailHeader;
+
+    if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+      return res.status(401).json({ success: false, error: 'Acesso restrito ao Administrador.' });
+    }
+
+    const recipient = (targetEmail || 'kowalski.madagascar123@gmail.com').trim();
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+
+    if (!smtpUser || !smtpPass) {
+      return res.status(400).json({
+        success: false,
+        configured: false,
+        error: 'SMTP_USER ou SMTP_PASS não estão configurados nas variáveis de ambiente do servidor.',
+        help: 'Defina SMTP_USER e SMTP_PASS nas configurações do projeto para habilitar o envio direto via Gmail SMTP.',
+      });
+    }
+
+    try {
+      const nodemailer = await import('nodemailer');
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from: `"RimaLab Academy" <${smtpUser}>`,
+        to: recipient,
+        subject: `⚡ Teste de Conexão SMTP RimaLab - ${new Date().toLocaleTimeString('pt-BR')}`,
+        html: `
+          <div style="font-family: sans-serif; background: #0a0a0a; color: #fff; padding: 24px; border-radius: 12px; border: 1px solid #f59e0b; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #f59e0b; margin-top: 0;">🎤 RimaLab SMTP Conectado com Sucesso!</h2>
+            <p>Salve, Kowalski! O serviço de envio de e-mails via Gmail SMTP está 100% operacional e autorizado.</p>
+            <p><strong>Remetente:</strong> ${smtpUser}</p>
+            <p><strong>Destinatário:</strong> ${recipient}</p>
+            <p><strong>Data/Hora:</strong> ${new Date().toLocaleString('pt-BR')}</p>
+            <p style="color: #22c55e;">✅ Notificações de novos professores e chamadas ao vivo serão entregues diretamente na sua caixa de entrada!</p>
+          </div>
+        `,
+      });
+
+      res.json({
+        success: true,
+        configured: true,
+        messageId: info.messageId,
+        recipient,
+        message: `E-mail de teste enviado com sucesso para ${recipient}!`,
+      });
+    } catch (smtpErr: any) {
+      console.error('[SMTP Test Error]', smtpErr);
+      res.status(500).json({
+        success: false,
+        configured: true,
+        error: smtpErr.message || 'Falha ao autenticar ou enviar e-mail via SMTP.',
+      });
+    }
+  });
+
+  // --- Admin Whitelist & Authorized Gmails Endpoints ---
+  app.get('/api/admin/authorized-gmails', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+    const givenPwd = (req.query.password as string) || pwdHeader;
+    const givenToken = (req.query.adminToken as string) || tokenHeader || tokenFromAuth;
+    const givenEmail = (req.query.email as string) || emailHeader;
+
+    if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+      return res.status(401).json({ success: false, error: 'Acesso restrito ao Administrador.' });
+    }
+
+    res.json({
+      success: true,
+      strictWhitelistMode,
+      allowAllGmails,
+      authorizedGmails: Array.from(authorizedGmails.values()),
+      blockedAttempts: blockedLoginAttempts,
+      totalAuthorized: authorizedGmails.size,
+      totalBlocked: blockedLoginAttempts.length,
+    });
+  });
+
+  app.post('/api/admin/authorized-gmails/add', (req, res) => {
+    const { password, adminToken, email, targetEmail, artisticName, role, plan, notes } = req.body || {};
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+    const givenPwd = password || pwdHeader;
+    const givenToken = adminToken || tokenHeader || tokenFromAuth;
+    const givenEmail = email || emailHeader;
+
+    if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+      return res.status(401).json({ success: false, error: 'Acesso restrito ao Administrador.' });
+    }
+
+    if (!targetEmail || typeof targetEmail !== 'string' || !targetEmail.includes('@')) {
+      return res.status(400).json({ success: false, error: 'Informe um endereço de e-mail válido para autorizar.' });
+    }
+
+    const normEmail = targetEmail.trim().toLowerCase();
+    const domainCheck = validateEmailDomain(normEmail);
+    if (!domainCheck.valid) {
+      return res.status(400).json({ success: false, error: domainCheck.reason });
+    }
+
+    const record: AuthorizedGmailRecord = {
+      email: normEmail,
+      artisticName: (artisticName && String(artisticName).trim()) || `MC ${normEmail.split('@')[0]}`,
+      role: (role as any) || 'STUDENT',
+      plan: (plan as any) || 'PRO',
+      authorizedBy: givenEmail || 'Kowalski MC (Master)',
+      authorizedAt: new Date().toISOString(),
+      status: 'ACTIVE',
+      notes: (notes && String(notes).trim()) || 'Autorizado via Painel Admin',
+    };
+
+    authorizedGmails.set(normEmail, record);
+
+    // Update any blocked attempts for this email
+    for (const attempt of blockedLoginAttempts) {
+      if (attempt.email.toLowerCase() === normEmail) {
+        attempt.status = 'APPROVED_LATER';
+      }
+    }
+
+    saveWhitelistToFile();
+
+    res.json({
+      success: true,
+      message: `Gmail '${normEmail}' autorizado com sucesso com o plano ${record.plan}!`,
+      authorizedGmail: record,
+    });
+  });
+
+  app.post('/api/admin/authorized-gmails/remove', (req, res) => {
+    const { password, adminToken, email, targetEmail } = req.body || {};
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+    const givenPwd = password || pwdHeader;
+    const givenToken = adminToken || tokenHeader || tokenFromAuth;
+    const givenEmail = email || emailHeader;
+
+    if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+      return res.status(401).json({ success: false, error: 'Acesso restrito ao Administrador.' });
+    }
+
+    if (!targetEmail || typeof targetEmail !== 'string') {
+      return res.status(400).json({ success: false, error: 'Informe o e-mail a ser removido.' });
+    }
+
+    const normEmail = targetEmail.trim().toLowerCase();
+    if (ADMIN_EMAILS.includes(normEmail) || normEmail === 'kowalski.madagascar123@gmail.com') {
+      return res.status(400).json({ success: false, error: 'A conta Mestre do Kowalski não pode ser revogada.' });
+    }
+
+    authorizedGmails.delete(normEmail);
+    saveWhitelistToFile();
+
+    res.json({
+      success: true,
+      message: `Autorização do Gmail '${normEmail}' revogada com sucesso.`,
+    });
+  });
+
+  app.post('/api/admin/authorized-gmails/toggle-mode', (req, res) => {
+    const { password, adminToken, email, strictMode, allowAll } = req.body || {};
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+    const givenPwd = password || pwdHeader;
+    const givenToken = adminToken || tokenHeader || tokenFromAuth;
+    const givenEmail = email || emailHeader;
+
+    if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+      return res.status(401).json({ success: false, error: 'Acesso restrito ao Administrador.' });
+    }
+
+    if (typeof strictMode === 'boolean') {
+      strictWhitelistMode = strictMode;
+    }
+    if (typeof allowAll === 'boolean') {
+      allowAllGmails = allowAll;
+    }
+
+    saveWhitelistToFile();
+
+    res.json({
+      success: true,
+      strictWhitelistMode,
+      allowAllGmails,
+      message: strictWhitelistMode 
+        ? '🔒 Modo Whitelist Estrito ATIVADO: Somente e-mails aprovados por Kowalski podem logar.' 
+        : '⚠️ Modo Whitelist Estrito DESATIVADO: Todos os e-mails válidos podem logar.',
+    });
+  });
+
+  app.post('/api/admin/authorized-gmails/quick-approve-blocked', (req, res) => {
+    const { password, adminToken, email, blockedId, role, plan } = req.body || {};
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+    const givenPwd = password || pwdHeader;
+    const givenToken = adminToken || tokenHeader || tokenFromAuth;
+    const givenEmail = email || emailHeader;
+
+    if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+      return res.status(401).json({ success: false, error: 'Acesso restrito ao Administrador.' });
+    }
+
+    const foundAttempt = blockedLoginAttempts.find(b => b.id === blockedId);
+    if (!foundAttempt) {
+      return res.status(404).json({ success: false, error: 'Tentativa bloqueada não encontrada.' });
+    }
+
+    const normEmail = foundAttempt.email.trim().toLowerCase();
+    const domainCheck = validateEmailDomain(normEmail);
+    if (!domainCheck.valid) {
+      return res.status(400).json({ success: false, error: `Não é possível aprovar e-mail inválido: ${domainCheck.reason}` });
+    }
+
+    const record: AuthorizedGmailRecord = {
+      email: normEmail,
+      artisticName: foundAttempt.artisticName || `MC ${normEmail.split('@')[0]}`,
+      role: (role as any) || 'STUDENT',
+      plan: (plan as any) || 'PRO',
+      authorizedBy: givenEmail || 'Kowalski MC (Master)',
+      authorizedAt: new Date().toISOString(),
+      status: 'ACTIVE',
+      notes: `Aprovado rapidamente da lista de bloqueios (IP: ${foundAttempt.ip})`,
+    };
+
+    authorizedGmails.set(normEmail, record);
+    foundAttempt.status = 'APPROVED_LATER';
+
+    saveWhitelistToFile();
+
+    res.json({
+      success: true,
+      message: `Tentativa bloqueada aprovada com sucesso! Gmail '${normEmail}' agora está autorizado a logar.`,
+      authorizedGmail: record,
+    });
+  });
+
+  app.post('/api/admin/authorized-gmails/test-check', (req, res) => {
+    const { testEmail } = req.body || {};
+    if (!testEmail || typeof testEmail !== 'string') {
+      return res.status(400).json({ error: 'Informe um e-mail para testar.' });
+    }
+    const norm = testEmail.trim().toLowerCase();
+    const domainCheck = validateEmailDomain(norm);
+    const isAuthorized = isEmailAuthorizedByKowalski(norm);
+    const existing = authorizedGmails.get(norm);
+
+    res.json({
+      testEmail: norm,
+      isValidDomain: domainCheck.valid,
+      domainReason: domainCheck.reason || null,
+      isAuthorized,
+      strictWhitelistMode,
+      allowAllGmails,
+      authorizedRecord: existing || null,
+      resultMessage: !domainCheck.valid 
+        ? `❌ Inválido: ${domainCheck.reason}`
+        : isAuthorized 
+          ? `✅ Autorizado a fazer login no RimaLab Academy!`
+          : `⛔ Bloqueado: Este Gmail não está na lista de autorizados de Kowalski.`,
+    });
+  });
+
+  // --- TEACHER PORTAL & ACCESS APPROVAL SYSTEM (KOWALSKI GMAIL AUTHORIZATION) ---
+
+  // 1. Teacher Request Access (Sends Email notification to kowalski.madagascar123@gmail.com)
+  app.post('/api/teachers/request-access', async (req, res) => {
+    try {
+      const { email, fullName, artisticName, discipline, phoneOrWhatsapp, discordUser, motivation, experience, password } = req.body || {};
+
+      if (!email || !email.includes('@')) {
+        return res.status(400).json({ error: 'Informe um endereço de e-mail (Gmail) válido.' });
+      }
+      if (!fullName || !fullName.trim()) {
+        return res.status(400).json({ error: 'Informe o seu nome completo.' });
+      }
+
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const candidateName = String(fullName).trim();
+      const specDiscipline = String(discipline || 'Métrica & Freestyle de Batalha').trim();
+
+      // Check if already approved master teacher
+      if (authorizedTeachers.has(normalizedEmail) || ADMIN_EMAILS.includes(normalizedEmail)) {
+        const existingProf = authorizedTeachers.get(normalizedEmail) || {
+          id: `teacher_${normalizedEmail.split('@')[0]}`,
+          email: normalizedEmail,
+          fullName: candidateName,
+          artisticName: artisticName || candidateName,
+          discipline: specDiscipline,
+          isMaster: true,
+          authorizedAt: new Date().toISOString(),
+        };
+
+        return res.json({
+          success: true,
+          status: 'APPROVED',
+          isApproved: true,
+          token: `prof_token_${normalizedEmail.split('@')[0]}_${Date.now()}`,
+          teacher: existingProf,
+          message: 'Você já possui autorização ativa como Professor da Academia de Rimas!',
+        });
+      }
+
+      // Check if there is an existing request
+      let reqRecord = teacherAccessRequests.get(normalizedEmail);
+      const host = req.get('host') || 'localhost:3000';
+      const protocol = req.protocol || 'http';
+      const baseUrl = `${protocol}://${host}`;
+
+      if (reqRecord) {
+        if (reqRecord.status === 'APPROVED') {
+          const prof = authorizedTeachers.get(normalizedEmail) || {
+            id: `teacher_${reqRecord.id}`,
+            email: normalizedEmail,
+            fullName: reqRecord.fullName,
+            artisticName: reqRecord.artisticName || reqRecord.fullName,
+            discipline: reqRecord.discipline,
+            isMaster: false,
+            authorizedAt: reqRecord.approvedAt || new Date().toISOString(),
+          };
+
+          return res.json({
+            success: true,
+            status: 'APPROVED',
+            isApproved: true,
+            token: `prof_token_${reqRecord.id}`,
+            teacher: prof,
+            message: 'Acesso de Professor já aprovado pelo Kowalski!',
+          });
+        }
+
+        // Update existing pending request and re-send email
+        reqRecord.fullName = candidateName;
+        if (artisticName) reqRecord.artisticName = artisticName;
+        reqRecord.discipline = specDiscipline;
+        if (phoneOrWhatsapp) reqRecord.phoneOrWhatsapp = phoneOrWhatsapp;
+        if (discordUser) reqRecord.discordUser = discordUser;
+        if (motivation) reqRecord.motivation = motivation;
+        if (experience) reqRecord.experience = experience;
+        reqRecord.requestedAt = new Date().toISOString();
+        reqRecord.status = 'PENDING';
+
+        await sendTeacherApprovalEmailToKowalski(reqRecord, baseUrl);
+
+        return res.json({
+          success: true,
+          status: 'PENDING',
+          isApproved: false,
+          message: 'Sua solicitação foi atualizada e um novo e-mail foi enviado para kowalski.madagascar123@gmail.com.',
+          request: reqRecord,
+        });
+      }
+
+      // Create new request
+      const reqId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const approveToken = `appr_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      const rejectToken = `rej_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+
+      const newRequest: TeacherAccessRequest = {
+        id: reqId,
+        email: normalizedEmail,
+        fullName: candidateName,
+        artisticName: artisticName || candidateName,
+        discipline: specDiscipline,
+        phoneOrWhatsapp: phoneOrWhatsapp ? String(phoneOrWhatsapp).trim() : undefined,
+        discordUser: discordUser ? String(discordUser).trim() : undefined,
+        motivation: motivation ? String(motivation).trim() : undefined,
+        experience: experience ? String(experience).trim() : undefined,
+        status: 'PENDING',
+        requestedAt: new Date().toISOString(),
+        token: approveToken,
+        rejectToken: rejectToken,
+      };
+
+      teacherAccessRequests.set(normalizedEmail, newRequest);
+
+      // Trigger email to Kowalski's Gmail
+      await sendTeacherApprovalEmailToKowalski(newRequest, baseUrl);
+
+      res.json({
+        success: true,
+        status: 'PENDING',
+        isApproved: false,
+        message: 'Solicitação de acesso enviada com sucesso para o Kowalski (kowalski.madagascar123@gmail.com). Assim que ele clicar no link de autorização no Gmail, seu acesso será liberado.',
+        request: {
+          id: newRequest.id,
+          email: newRequest.email,
+          fullName: newRequest.fullName,
+          discipline: newRequest.discipline,
+          requestedAt: newRequest.requestedAt,
+          status: newRequest.status,
+        },
+      });
+
+    } catch (err: any) {
+      console.error('Teacher request error:', err);
+      res.status(500).json({ error: err.message || 'Erro ao processar solicitação de professor.' });
+    }
+  });
+
+  // 2. Teacher Login Endpoint
+  app.post('/api/teachers/login', (req, res) => {
+    try {
+      const { email, password } = req.body || {};
+      if (!email || !email.includes('@')) {
+        return res.status(400).json({ error: 'Informe um e-mail válido.' });
+      }
+
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const cleanPwd = String(password || '').trim();
+
+      // Master admin bypass
+      const isMasterAdmin = ADMIN_EMAILS.includes(normalizedEmail) || cleanPwd === '36737829';
+      if (isMasterAdmin) {
+        let teacher = authorizedTeachers.get(normalizedEmail);
+        if (!teacher) {
+          teacher = {
+            id: `teacher_${normalizedEmail.split('@')[0]}`,
+            email: normalizedEmail,
+            fullName: normalizedEmail.includes('kowalski') ? 'Kowalski MC' : 'Professor RimaLab',
+            artisticName: normalizedEmail.includes('kowalski') ? 'Kowalski MC (Mestre)' : 'Prof. Mestre',
+            discipline: 'Métrica & Freestyle de Batalha',
+            isMaster: true,
+            authorizedAt: new Date().toISOString(),
+          };
+          authorizedTeachers.set(normalizedEmail, teacher);
+        }
+
+        return res.json({
+          success: true,
+          status: 'APPROVED',
+          authorized: true,
+          token: `prof_token_master_${Date.now()}`,
+          teacher,
+          message: `Bem-vindo, Mestre ${teacher.fullName}! Acesso total concedido.`,
+        });
+      }
+
+      // Check if authorized
+      const teacher = authorizedTeachers.get(normalizedEmail);
+      if (teacher) {
+        return res.json({
+          success: true,
+          status: 'APPROVED',
+          authorized: true,
+          token: `prof_token_${teacher.id}`,
+          teacher,
+          message: `Bem-vindo de volta, Professor ${teacher.fullName}!`,
+        });
+      }
+
+      // Check if pending request exists
+      const request = teacherAccessRequests.get(normalizedEmail);
+      if (request) {
+        if (request.status === 'PENDING') {
+          return res.status(403).json({
+            success: false,
+            status: 'PENDING',
+            authorized: false,
+            message: 'Sua solicitação de professor está aguardando aprovação de Kowalski no e-mail kowalski.madagascar123@gmail.com.',
+            request: {
+              email: request.email,
+              fullName: request.fullName,
+              discipline: request.discipline,
+              requestedAt: request.requestedAt,
+            },
+          });
+        }
+        if (request.status === 'REJECTED') {
+          return res.status(403).json({
+            success: false,
+            status: 'REJECTED',
+            authorized: false,
+            message: 'Sua solicitação de acesso para professor foi recusada pelo administrador.',
+          });
+        }
+      }
+
+      return res.status(404).json({
+        success: false,
+        status: 'NOT_FOUND',
+        authorized: false,
+        message: 'Nenhum cadastro de professor encontrado para este e-mail. Solicite o acesso na aba "Solicitar Acesso".',
+      });
+
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Erro ao realizar login de professor.' });
+    }
+  });
+
+  // 3. Check Teacher Request Status (Real-time polling)
+  app.get('/api/teachers/status', (req, res) => {
+    const emailParam = req.query.email as string;
+    if (!emailParam || !emailParam.includes('@')) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    const normalizedEmail = emailParam.trim().toLowerCase();
+
+    if (authorizedTeachers.has(normalizedEmail) || ADMIN_EMAILS.includes(normalizedEmail)) {
+      const teacher = authorizedTeachers.get(normalizedEmail);
+      return res.json({
+        success: true,
+        status: 'APPROVED',
+        isApproved: true,
+        teacher: teacher || null,
+      });
+    }
+
+    const request = teacherAccessRequests.get(normalizedEmail);
+    if (!request) {
+      return res.json({
+        success: true,
+        status: 'NOT_FOUND',
+        isApproved: false,
+      });
+    }
+
+    res.json({
+      success: true,
+      status: request.status,
+      isApproved: request.status === 'APPROVED',
+      request,
+    });
+  });
+
+  // 4. One-Click Approval Endpoint (Clicked by Kowalski in Gmail)
+  app.get('/api/teachers/approve', (req, res) => {
+    const { token, email } = req.query as { token?: string; email?: string };
+
+    if (!token || !email) {
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head><meta charset="utf-8"/><title>Erro - RimaLab</title></head>
+        <body style="background:#0a0a0a; color:#fff; font-family:sans-serif; text-align:center; padding:50px;">
+          <h1 style="color:#ef4444;">Link Inválido</h1>
+          <p>Os parâmetros de autorização não foram encontrados.</p>
+        </body>
+        </html>
+      `);
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const reqObj = teacherAccessRequests.get(normalizedEmail);
+
+    if (!reqObj || reqObj.token !== token) {
+      return res.status(403).send(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head><meta charset="utf-8"/><title>Token Expirado ou Inválido - RimaLab</title></head>
+        <body style="background:#0a0a0a; color:#fff; font-family:sans-serif; text-align:center; padding:50px;">
+          <h1 style="color:#f59e0b;">Token Inválido ou Já Utilizado</h1>
+          <p>Esta solicitação de professor não foi localizada ou já foi processada.</p>
+          <a href="/" style="color:#f59e0b; font-weight:bold;">Voltar para o RimaLab</a>
+        </body>
+        </html>
+      `);
+    }
+
+    // Approve the teacher
+    reqObj.status = 'APPROVED';
+    reqObj.approvedAt = new Date().toISOString();
+    reqObj.approvedBy = 'kowalski.madagascar123@gmail.com';
+
+    const teacherProf: TeacherProfile = {
+      id: `teacher_${reqObj.id}`,
+      email: normalizedEmail,
+      fullName: reqObj.fullName,
+      artisticName: reqObj.artisticName || reqObj.fullName,
+      discipline: reqObj.discipline,
+      isMaster: false,
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${reqObj.id}`,
+      phoneOrWhatsapp: reqObj.phoneOrWhatsapp,
+      discordUser: reqObj.discordUser,
+      bio: reqObj.motivation || `Professor de ${reqObj.discipline} na Academia de Rimas.`,
+      authorizedAt: reqObj.approvedAt,
+    };
+
+    authorizedTeachers.set(normalizedEmail, teacherProf);
+
+    // Also upgrade or ensure user account exists with Teacher role
+    let foundUser: StoredUser | null = null;
+    for (const u of users.values()) {
+      if (u.email.toLowerCase() === normalizedEmail) {
+        foundUser = u;
+        break;
+      }
+    }
+
+    if (foundUser) {
+      foundUser.role = 'ADMIN';
+    } else {
+      const newUId = `user_prof_${Date.now()}`;
+      users.set(newUId, {
+        id: newUId,
+        email: normalizedEmail,
+        passwordHash: 'teacher_pass',
+        role: 'ADMIN',
+        createdAt: new Date().toISOString(),
+      });
+      profiles.set(newUId, {
+        id: `prof_${newUId}`,
+        userId: newUId,
+        artisticName: reqObj.artisticName || reqObj.fullName,
+        tagline: `🎓 Professor de ${reqObj.discipline}`,
+        bio: reqObj.motivation || 'Professor aprovado por Kowalski.',
+        favoriteStyle: 'Boom Bap',
+        level: 10,
+        totalXP: 5000,
+        streakDays: 5,
+        avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${newUId}`,
+        isPublic: true,
+        showStats: true,
+        showHistory: true,
+        totalSessions: 10,
+        totalMinutesPracticed: 60,
+        bestScore: 95,
+        totalWordsRhymed: 800,
+      });
+      subscriptions.set(newUId, {
+        userId: newUId,
+        plan: 'ANNUAL',
+        status: 'ACTIVE',
+        validUntil: '2030-12-31T23:59:59Z',
+        aiMonthlyQuota: 99999,
+        aiQuotaUsed: 0,
+        gmail: normalizedEmail,
+      });
+    }
+
+    console.log(`[TEACHER APPROVED] Kowalski aprovou o professor ${reqObj.fullName} (${normalizedEmail}) via Gmail!`);
+
+    // Render beautiful confirmation page
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>Professor Aprovado - Kowalski MC</title>
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+      </head>
+      <body style="background:#09090b; color:#f4f4f5; font-family:'Plus Jakarta Sans', sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:20px; box-sizing:border-box;">
+        <div style="background:#18181b; border:1px solid #27272a; border-radius:16px; max-width:540px; width:100%; padding:36px; text-align:center; box-shadow:0 20px 40px rgba(0,0,0,0.6);">
+          <div style="width:72px; height:72px; background:linear-gradient(135deg, #f59e0b, #ea580c); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px auto; font-size:36px; box-shadow:0 8px 24px rgba(245, 158, 11, 0.4);">
+            🎓
+          </div>
+          <span style="background:rgba(245, 158, 11, 0.15); color:#f59e0b; border:1px solid rgba(245, 158, 11, 0.3); font-size:12px; font-weight:800; padding:4px 12px; border-radius:999px; text-transform:uppercase; letter-spacing:1px;">
+            Autorização Kowalski Concluída
+          </span>
+          <h1 style="color:#ffffff; font-size:24px; font-weight:800; margin:16px 0 8px 0; letter-spacing:-0.5px;">
+            Professor Aprovado com Sucesso!
+          </h1>
+          <p style="color:#a1a1aa; font-size:15px; line-height:1.6; margin:0 0 24px 0;">
+            O professor <strong>${reqObj.fullName}</strong> (<span style="color:#fbbf24;">${normalizedEmail}</span>) agora tem permissão total para acessar a Área do Professor, gerenciar alunos e realizar mentorias no RimaLab.
+          </p>
+
+          <div style="background:#27272a; border-radius:12px; padding:16px; text-align:left; margin-bottom:28px; font-size:13px;">
+            <p style="margin:4px 0; color:#d4d4d8;"><strong>Matéria / Especialidade:</strong> ${reqObj.discipline}</p>
+            <p style="margin:4px 0; color:#d4d4d8;"><strong>Autorizado por:</strong> Kowalski (kowalski.madagascar123@gmail.com)</p>
+            <p style="margin:4px 0; color:#d4d4d8;"><strong>Data:</strong> ${new Date().toLocaleString('pt-BR')}</p>
+          </div>
+
+          <a href="/" style="display:inline-block; background:#f59e0b; color:#09090b; font-weight:800; font-size:15px; padding:14px 32px; border-radius:10px; text-decoration:none; box-shadow:0 6px 20px rgba(245, 158, 11, 0.35); transition:transform 0.2s;">
+            🚀 Abrir Plataforma RimaLab
+          </a>
+          <p style="color:#71717a; font-size:12px; margin-top:20px;">
+            A tela do professor será desbloqueada em tempo real automaticamente.
+          </p>
+        </div>
+      </body>
+      </html>
+    `);
+  });
+
+  // 5. One-Click Rejection Endpoint
+  app.get('/api/teachers/reject', (req, res) => {
+    const { token, email } = req.query as { token?: string; email?: string };
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const reqObj = teacherAccessRequests.get(normalizedEmail);
+
+    if (reqObj && reqObj.rejectToken === token) {
+      reqObj.status = 'REJECTED';
+      reqObj.rejectedAt = new Date().toISOString();
+      authorizedTeachers.delete(normalizedEmail);
+    }
+
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head><meta charset="utf-8"/><title>Solicitação Recusada - RimaLab</title></head>
+      <body style="background:#0a0a0a; color:#fff; font-family:sans-serif; text-align:center; padding:50px;">
+        <h1 style="color:#ef4444;">❌ Solicitação Recusada</h1>
+        <p>A solicitação de professor para <strong>${normalizedEmail}</strong> foi marcada como recusada.</p>
+        <a href="/" style="color:#f59e0b; font-weight:bold;">Ir para a Página Inicial</a>
+      </body>
+      </html>
+    `);
+  });
+
+  // 6. Admin List all Teacher Requests
+  app.get('/api/admin/teachers/requests', (req, res) => {
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+    const authHeader = req.headers.authorization;
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+
+    if (!isAuthorizedAdmin(pwdHeader, tokenHeader || tokenFromAuth, emailHeader)) {
+      return res.status(401).json({ error: 'Acesso restrito aos administradores / Kowalski.' });
+    }
+
+    const requestsList = Array.from(teacherAccessRequests.values()).sort((a, b) => 
+      new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime()
+    );
+
+    const approvedList = Array.from(authorizedTeachers.values());
+
+    res.json({
+      success: true,
+      pendingRequests: requestsList.filter(r => r.status === 'PENDING'),
+      allRequests: requestsList,
+      approvedTeachers: approvedList,
+      dispatchedEmails: dispatchedTeacherEmails,
+    });
+  });
+
+  // 7. Admin Manual In-App Approve
+  app.post('/api/admin/teachers/approve-manual', (req, res) => {
+    const { email, password, adminToken, adminEmail } = req.body || {};
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+    const authHeader = req.headers.authorization;
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+
+    if (!isAuthorizedAdmin(password || pwdHeader, adminToken || tokenHeader || tokenFromAuth, adminEmail || emailHeader)) {
+      return res.status(401).json({ error: 'Acesso não autorizado.' });
+    }
+
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const reqObj = teacherAccessRequests.get(normalizedEmail);
+
+    if (reqObj) {
+      reqObj.status = 'APPROVED';
+      reqObj.approvedAt = new Date().toISOString();
+      reqObj.approvedBy = adminEmail || 'kowalski.madagascar123@gmail.com';
+    }
+
+    const teacherProf: TeacherProfile = {
+      id: `teacher_${Date.now()}`,
+      email: normalizedEmail,
+      fullName: reqObj?.fullName || `Prof. ${normalizedEmail.split('@')[0]}`,
+      artisticName: reqObj?.artisticName || reqObj?.fullName || `Prof. ${normalizedEmail.split('@')[0]}`,
+      discipline: reqObj?.discipline || 'Métrica & Freestyle',
+      isMaster: ADMIN_EMAILS.includes(normalizedEmail),
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${normalizedEmail}`,
+      authorizedAt: new Date().toISOString(),
+    };
+
+    authorizedTeachers.set(normalizedEmail, teacherProf);
+
+    res.json({
+      success: true,
+      message: `✅ Professor ${teacherProf.fullName} (${normalizedEmail}) aprovado com sucesso!`,
+      teacher: teacherProf,
+    });
+  });
+
+  // 8. Admin Manual In-App Reject
+  app.post('/api/admin/teachers/reject-manual', (req, res) => {
+    const { email, password, adminToken, adminEmail } = req.body || {};
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+    const authHeader = req.headers.authorization;
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+
+    if (!isAuthorizedAdmin(password || pwdHeader, adminToken || tokenHeader || tokenFromAuth, adminEmail || emailHeader)) {
+      return res.status(401).json({ error: 'Acesso não autorizado.' });
+    }
+
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const reqObj = teacherAccessRequests.get(normalizedEmail);
+    if (reqObj) {
+      reqObj.status = 'REJECTED';
+      reqObj.rejectedAt = new Date().toISOString();
+    }
+    authorizedTeachers.delete(normalizedEmail);
+
+    res.json({
+      success: true,
+      message: `Solicitação para ${normalizedEmail} foi recusada.`,
+    });
+  });
+
+  // 9. Public / Authenticated List of Approved Teachers
+  app.get('/api/teachers/list', (req, res) => {
+    res.json({
+      success: true,
+      teachers: Array.from(authorizedTeachers.values()),
+    });
+  });
+
+  // 10. Admin View Dispatched Emails History
+  app.get('/api/admin/teachers/dispatched-emails', (req, res) => {
+    res.json({
+      targetAdminGmail: 'kowalski.madagascar123@gmail.com',
+      totalSent: dispatchedTeacherEmails.length,
+      emails: dispatchedTeacherEmails,
+    });
+  });
+
   // Admin: Broadcast / Update Live Call Link (WhatsApp / Discord / Google Meet)
   app.post('/api/admin/live-call', (req, res) => {
+
     const { password, adminToken, email, platform, url, title, description, hostName, isActive, targetTier } = req.body || {};
     const authHeader = req.headers.authorization;
     const pwdHeader = req.headers['x-admin-password'] as string;
@@ -1033,6 +2264,232 @@ async function startServer() {
       currentLiveCall,
       ipTrials: ipList,
       users: userList,
+    });
+  });
+
+  // Admin: Get all registered students with full profile & XP details
+  app.get('/api/admin/students', (req, res) => {
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+
+    if (!isAuthorizedAdmin(pwdHeader, tokenHeader || tokenFromAuth, emailHeader)) {
+      return res.status(401).json({ error: 'Acesso restrito aos Professores.' });
+    }
+
+    const studentList = Array.from(users.values()).map(u => {
+      const prof = profiles.get(u.id);
+      const sub = subscriptions.get(u.id);
+      const totalXP = prof?.totalXP ?? 0;
+      const level = Math.max(1, Math.floor(totalXP / 55) + 1);
+
+      return {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+        createdAt: u.createdAt,
+        artisticName: prof?.artisticName || `MC ${u.email.split('@')[0]}`,
+        level,
+        totalXP,
+        favoriteStyle: prof?.favoriteStyle || 'Boom Bap',
+        tagline: prof?.tagline || 'MC em Treinamento',
+        bio: prof?.bio || '',
+        totalSessions: prof?.totalSessions || 0,
+        unlockedChannels: (prof as any)?.unlockedChannels || ['#iniciantes-treino', '#primeiras-rimas'],
+        plan: sub?.plan || 'FREE',
+      };
+    });
+
+    res.json({
+      students: studentList,
+      totalCount: studentList.length,
+    });
+  });
+
+  // Admin: Award XP to a student by Gmail / Email
+  app.post('/api/admin/award-xp-by-email', (req, res) => {
+    const { password, adminToken, adminEmail, email, xpAmount, reason, unlockedChannels, note, artisticName } = req.body || {};
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+    const givenPwd = password || pwdHeader;
+    const givenToken = adminToken || tokenHeader || tokenFromAuth;
+    const givenEmail = adminEmail || emailHeader;
+
+    if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Acesso não autorizado. Apenas os professores podem atribuir XP por Gmail.' 
+      });
+    }
+
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Por favor, informe um endereço de Gmail/e-mail válido do aluno.' 
+      });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const numericXp = Number(xpAmount) || 0;
+
+    // Find existing user by email
+    let foundUser: StoredUser | null = null;
+    for (const u of users.values()) {
+      if (u.email.toLowerCase() === normalizedEmail) {
+        foundUser = u;
+        break;
+      }
+    }
+
+    // If user does not exist yet, create an account for this student Gmail
+    if (!foundUser) {
+      const newUserId = `user_g_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      foundUser = {
+        id: newUserId,
+        email: normalizedEmail,
+        passwordHash: 'gmail_student_pass',
+        role: 'USER',
+        createdAt: new Date().toISOString(),
+      };
+      users.set(newUserId, foundUser);
+
+      const calculatedLevel = Math.max(1, Math.floor(Math.max(0, numericXp) / 55) + 1);
+      const initialProf: StoredProfile = {
+        id: `prof_${newUserId}`,
+        userId: newUserId,
+        artisticName: artisticName?.trim() || `MC ${normalizedEmail.split('@')[0]}`,
+        tagline: 'MC em Treinamento • Academia de Rimas',
+        bio: note ? `[Nota do Professor]: ${note}` : 'Aluno da Academia de Rimas.',
+        favoriteStyle: 'Boom Bap',
+        level: calculatedLevel,
+        totalXP: Math.max(0, numericXp),
+        streakDays: 1,
+        lastPracticeDate: new Date().toISOString(),
+        avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${newUserId}`,
+        isPublic: true,
+        showStats: true,
+        showHistory: true,
+        totalSessions: 0,
+        totalMinutesPracticed: 0,
+        bestScore: 0,
+        totalWordsRhymed: 0,
+      };
+      if (unlockedChannels && Array.isArray(unlockedChannels)) {
+        (initialProf as any).unlockedChannels = unlockedChannels;
+      }
+      profiles.set(newUserId, initialProf);
+
+      const newSub: StoredSubscription = {
+        userId: newUserId,
+        plan: 'FREE_TRIAL',
+        status: 'ACTIVE',
+        validUntil: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        aiMonthlyQuota: 20,
+        aiQuotaUsed: 0,
+        gmail: normalizedEmail,
+      };
+      subscriptions.set(newUserId, newSub);
+    } else {
+      // Update existing user profile
+      let prof = profiles.get(foundUser.id);
+      if (!prof) {
+        prof = {
+          id: `prof_${foundUser.id}`,
+          userId: foundUser.id,
+          artisticName: artisticName?.trim() || `MC ${normalizedEmail.split('@')[0]}`,
+          tagline: 'MC em Treinamento',
+          bio: note ? `[Nota do Professor]: ${note}` : '',
+          favoriteStyle: 'Boom Bap',
+          level: 1,
+          totalXP: 0,
+          streakDays: 1,
+          lastPracticeDate: new Date().toISOString(),
+          avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${foundUser.id}`,
+          isPublic: true,
+          showStats: true,
+          showHistory: true,
+          totalSessions: 0,
+          totalMinutesPracticed: 0,
+          bestScore: 0,
+          totalWordsRhymed: 0,
+        };
+        profiles.set(foundUser.id, prof);
+      }
+
+      // Add XP & calculate level with 55 XP = 1 Nível
+      prof.totalXP = Math.max(0, (prof.totalXP || 0) + numericXp);
+      prof.level = Math.max(1, Math.floor(prof.totalXP / 55) + 1);
+
+      if (artisticName && artisticName.trim()) {
+        prof.artisticName = artisticName.trim();
+      }
+      if (unlockedChannels && Array.isArray(unlockedChannels)) {
+        (prof as any).unlockedChannels = unlockedChannels;
+      }
+      if (note && note.trim()) {
+        prof.bio = `${prof.bio ? prof.bio + '\n\n' : ''}[Nota do Professor]: ${note.trim()}`;
+      }
+    }
+
+    // Log XP transaction
+    xpTransactions.push({
+      id: `xp_prof_${Date.now()}`,
+      userId: foundUser.id,
+      amount: numericXp,
+      reason: reason || 'TEACHER_AWARD_GMAIL',
+      description: note || `XP concedido pelo Professor para ${normalizedEmail}`,
+      createdAt: new Date().toISOString(),
+    });
+
+    const updatedProfile = profiles.get(foundUser.id)!;
+    const sub = subscriptions.get(foundUser.id);
+
+    res.json({
+      success: true,
+      message: `🎉 +${numericXp} XP atribuído com sucesso para ${normalizedEmail}! Nível atual: ${updatedProfile.level}`,
+      user: { id: foundUser.id, email: foundUser.email, role: foundUser.role },
+      profile: { ...updatedProfile, email: normalizedEmail },
+      subscription: sub,
+      xpAdded: numericXp,
+      newTotalXP: updatedProfile.totalXP,
+      newLevel: updatedProfile.level,
+    });
+  });
+
+  // User: Real-time Profile Sync by Gmail / Email
+  app.get('/api/user/profile-by-email', (req, res) => {
+    const emailParam = req.query.email as string;
+    if (!emailParam || !emailParam.includes('@')) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    const normalized = emailParam.trim().toLowerCase();
+    let foundUser: StoredUser | null = null;
+    for (const u of users.values()) {
+      if (u.email.toLowerCase() === normalized) {
+        foundUser = u;
+        break;
+      }
+    }
+
+    if (!foundUser) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    const prof = profiles.get(foundUser.id);
+    const sub = subscriptions.get(foundUser.id);
+    const calculatedLevel = prof ? Math.max(1, Math.floor((prof.totalXP || 0) / 55) + 1) : 1;
+
+    res.json({
+      user: { id: foundUser.id, email: foundUser.email, role: foundUser.role },
+      profile: prof ? { ...prof, email: foundUser.email, level: calculatedLevel } : null,
+      subscription: sub || null,
     });
   });
 
@@ -1297,7 +2754,7 @@ async function startServer() {
       const profile = profiles.get(userId) || profiles.get(seedUserId)!;
       const sub = subscriptions.get(userId) || subscriptions.get(seedUserId)!;
 
-      const { transcript, lyrics, beatStyle, bpm, durationSeconds, challengeId, trainingType, focusSkills, userAge, age } = req.body;
+      const { transcript, lyrics, beatStyle, bpm, durationSeconds, challengeId, trainingType, focusSkills, userAge, age, judgePersonality } = req.body;
       const actualText = transcript || lyrics || '';
 
       if (!actualText || actualText.trim().length === 0) {
@@ -1308,6 +2765,13 @@ async function startServer() {
       const mcAge = userAge || age || profile.age || 'Não especificada';
       const vertente = trainingType || profile.trainingType || 'freestyle';
       const skillsToFocus = Array.isArray(focusSkills) && focusSkills.length > 0 ? focusSkills.join(', ') : 'Geral (Métrica e Flow)';
+      const personality = judgePersonality || 'kowalski_rigido';
+
+      const judgeRoleDescription = personality === 'jurado_bda'
+        ? 'Jurado de Batalha de Sangue (Estilo BDA/FBC): foco máximo no impacto da punchline, postura agressiva, criatividade no ataque e resposta direta.'
+        : personality === 'coach_construtivo'
+        ? 'Coach de Flow & Métrica: foco pedagógico detalhado na métrica multissilábica, respiração nos compassos 4/4 e evolução técnica.'
+        : 'Kowalski Sem Filtro: avaliação ultra-técnica, cirúrgica e honesta, sem passar pano para rimas óbvias no infinitivo, focando em divisão rítmica real.';
 
       // 1. Run Deterministic Heuristics
       const deterministicResult = analyzeRhymesDeterministically(actualText, duration);
@@ -1321,7 +2785,10 @@ async function startServer() {
         try {
           const aiResponse = await ai.models.generateContent({
             model: 'gemini-3.7-flash',
-            contents: `Você é um Jurado e Especialista Técnico Profissional de Batalhas de Rima e Freestyle (estilo jurado experiente da Batalha da Aldeia, Red Bull FrancaMente e Batalha do Museu).
+            contents: `Você é um Jurado e Especialista Técnico Profissional de Batalhas de Rima e Freestyle.
+PERSONALIDADE ATIVA DO JURADO:
+${judgeRoleDescription}
+
 Sua missão é dar uma avaliação real, honesta e técnica da transcrição do MC.
 DIRETRIZES DE POSTURA:
 - Não seja arrogante nem grosseiro, mas NUNCA passe pano ou use elogios vazios/genéricos.
@@ -2145,6 +3612,413 @@ Analise este título/link e retorne um JSON com:
     }
 
     res.json({ success: true, message: 'Seu histórico e estatísticas foram resetados com sucesso conforme LGPD.' });
+  });
+
+  // --- Global Site Customization & Kowalski Studio Endpoints ---
+  interface ServerSiteCustomization {
+    brandName: string;
+    brandSub: string;
+    heroTitle: string;
+    heroHighlightWord: string;
+    heroSubtitle: string;
+    heroGradient: string;
+    ctaButtonText: string;
+    announcementBanner: {
+      enabled: boolean;
+      text: string;
+      badge: string;
+      linkUrl?: string;
+      style: string;
+    };
+    globalAlert?: {
+      enabled: boolean;
+      title: string;
+      message: string;
+      type: string;
+      buttonText?: string;
+      buttonLink?: string;
+    };
+    accentColor: string;
+    topTickerText: string;
+    customCss?: string;
+    customHtmlSnippet?: string;
+    footerMessage?: string;
+    lastUpdated?: string;
+    updatedBy?: string;
+  }
+
+  const DEFAULT_SERVER_CUSTOMIZATION: ServerSiteCustomization = {
+    brandName: 'Academia de Rimas',
+    brandSub: 'Por Kowalski MC & Luquita MC',
+    heroTitle: 'Domine o Freestyle & as Batalhas de Rima',
+    heroHighlightWord: 'Freestyle',
+    heroSubtitle: 'Treine improviso, speed flow e punchlines com sintetizador de beats em tempo real, bot estilo Discord com comandos /play e avaliação técnica direta ao ponto feita por IA jurado profissional.',
+    heroGradient: 'amber-orange-red',
+    ctaButtonText: 'Entrar no Estúdio de Gravação',
+    announcementBanner: {
+      enabled: false,
+      text: '🎤 Aula Especial de Speed Flow hoje com Kowalski MC & Luquita MC às 20h!',
+      badge: 'NOVIDADE',
+      linkUrl: '',
+      style: 'amber',
+    },
+    globalAlert: {
+      enabled: false,
+      title: '🏆 Batalha Semanal RimaLab',
+      message: 'Participe do torneio de freestyle no Discord e dispute a vaga no pódio!',
+      type: 'hype',
+      buttonText: 'Ver Detalhes',
+      buttonLink: '',
+    },
+    accentColor: 'amber',
+    topTickerText: '🎤 Luquita MC & ⚡ Kowalski MC • Mestres da Rima, Métrica & Inteligência Artificial',
+    customCss: '',
+    customHtmlSnippet: '',
+    footerMessage: 'RimaLab Academy • Transformando MCs em Máquinas de Freestyle com IA e Hip-Hop Brasileiro',
+    lastUpdated: new Date().toISOString(),
+    updatedBy: 'Sistema',
+  };
+
+  const CUSTOMIZATION_FILE_PATH = path.join(process.cwd(), 'src', 'data', 'site-customization.json');
+
+  // Load persistent customization from disk or fallback to defaults
+  function loadCustomizationFromFile(): ServerSiteCustomization {
+    try {
+      if (fs.existsSync(CUSTOMIZATION_FILE_PATH)) {
+        const raw = fs.readFileSync(CUSTOMIZATION_FILE_PATH, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && parsed.heroTitle) {
+          console.log('[SiteCustomization] Loaded persistent config from disk:', CUSTOMIZATION_FILE_PATH);
+          return { ...DEFAULT_SERVER_CUSTOMIZATION, ...parsed };
+        }
+      }
+    } catch (e) {
+      console.warn('[SiteCustomization] Could not read customization file, using defaults:', e);
+    }
+    return DEFAULT_SERVER_CUSTOMIZATION;
+  }
+
+  // Save persistent customization to disk synchronously
+  function saveCustomizationToFile(data: ServerSiteCustomization) {
+    try {
+      const dir = path.dirname(CUSTOMIZATION_FILE_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(CUSTOMIZATION_FILE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+      console.log('[SiteCustomization] Saved permanently to disk:', CUSTOMIZATION_FILE_PATH);
+    } catch (e) {
+      console.error('[SiteCustomization] Failed to write customization to disk:', e);
+    }
+  }
+
+  // Active in-memory site customization initialized from file
+  let globalSiteCustomization: ServerSiteCustomization = loadCustomizationFromFile();
+
+  // SSE Subscribers for Real-Time Instant Customization Synchronization
+  const customizationSubscribers = new Set<express.Response>();
+
+  function broadcastCustomizationUpdate() {
+    const payload = JSON.stringify({
+      type: 'customization-update',
+      customization: globalSiteCustomization,
+      timestamp: Date.now(),
+    });
+    for (const client of customizationSubscribers) {
+      try {
+        client.write(`data: ${payload}\n\n`);
+      } catch {
+        customizationSubscribers.delete(client);
+      }
+    }
+  }
+
+  // SSE Stream Endpoint for Site Customization
+  app.get('/api/site-customization/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    res.write(`data: ${JSON.stringify({ type: 'customization-init', customization: globalSiteCustomization, timestamp: Date.now() })}\n\n`);
+    customizationSubscribers.add(res);
+
+    const pingInterval = setInterval(() => {
+      try {
+        res.write(`data: ${JSON.stringify({ type: 'ping', timestamp: Date.now() })}\n\n`);
+      } catch {
+        clearInterval(pingInterval);
+        customizationSubscribers.delete(res);
+      }
+    }, 10000);
+
+    req.on('close', () => {
+      clearInterval(pingInterval);
+      customizationSubscribers.delete(res);
+    });
+  });
+
+  // GET: Public fetch of active customization
+  app.get('/api/site-customization', (req, res) => {
+    res.json({ success: true, customization: globalSiteCustomization });
+  });
+
+  // POST: Admin update customization (Persists to file + broadcasts instantly)
+  app.post('/api/site-customization', (req, res) => {
+    const { updates, password, adminToken, email } = req.body || {};
+    const payloadUpdates = (updates && typeof updates === 'object') ? updates : req.body;
+
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+    const givenPwd = password || pwdHeader;
+    const givenToken = adminToken || tokenHeader || tokenFromAuth;
+    const givenEmail = email || emailHeader;
+
+    if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Acesso restrito. Digite a senha mestre de Administrador para modificar o site.' 
+      });
+    }
+
+    if (payloadUpdates && typeof payloadUpdates === 'object') {
+      // Filter out auth keys from the customization object
+      const { password: _p, adminToken: _t, email: _e, updates: _u, ...cleanUpdates } = payloadUpdates;
+
+      globalSiteCustomization = {
+        ...globalSiteCustomization,
+        ...cleanUpdates,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: cleanUpdates.updatedBy || 'Kowalski Studio / Admin',
+      };
+
+      // 1. Save permanently to disk
+      saveCustomizationToFile(globalSiteCustomization);
+
+      // 2. Broadcast in real time to all connected clients via SSE
+      broadcastCustomizationUpdate();
+
+      return res.json({ 
+        success: true, 
+        savedToDisk: true,
+        customization: globalSiteCustomization,
+        message: 'Personalização salva com sucesso no servidor e transmitida em tempo real para todos os usuários!' 
+      });
+    }
+    res.status(400).json({ error: 'Configuração inválida.' });
+  });
+
+  // POST: Reset site customization
+  app.post('/api/site-customization/reset', (req, res) => {
+    const { password, adminToken, email } = req.body || {};
+    const authHeader = req.headers.authorization;
+    const pwdHeader = req.headers['x-admin-password'] as string;
+    const tokenHeader = req.headers['x-admin-token'] as string;
+    const emailHeader = req.headers['x-admin-email'] as string;
+
+    const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+    const givenPwd = password || pwdHeader;
+    const givenToken = adminToken || tokenHeader || tokenFromAuth;
+    const givenEmail = email || emailHeader;
+
+    if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+      return res.status(401).json({ success: false, error: 'Acesso restrito ao Administrador.' });
+    }
+
+    globalSiteCustomization = {
+      ...DEFAULT_SERVER_CUSTOMIZATION,
+      lastUpdated: new Date().toISOString(),
+      updatedBy: 'Sistema (Reset)',
+    };
+
+    saveCustomizationToFile(globalSiteCustomization);
+    broadcastCustomizationUpdate();
+
+    res.json({ success: true, customization: globalSiteCustomization });
+  });
+
+  // AI Kowalski Studio Prompt Interpreter
+  app.post('/api/admin/kowalski-studio/chat', async (req, res) => {
+    try {
+      const { prompt, currentCustomization, password, adminToken, email } = req.body || {};
+      const authHeader = req.headers.authorization;
+      const pwdHeader = req.headers['x-admin-password'] as string;
+      const tokenHeader = req.headers['x-admin-token'] as string;
+      const emailHeader = req.headers['x-admin-email'] as string;
+
+      const tokenFromAuth = authHeader?.startsWith('Bearer ') ? authHeader.replace('Bearer ', '') : '';
+      const givenPwd = password || pwdHeader;
+      const givenToken = adminToken || tokenHeader || tokenFromAuth;
+      const givenEmail = email || emailHeader;
+
+      if (!isAuthorizedAdmin(givenPwd, givenToken, givenEmail)) {
+        return res.status(401).json({ 
+          success: false, 
+          error: 'Acesso restrito. Digite a senha mestre de Administrador para usar o Kowalski Studio.' 
+        });
+      }
+
+      const query = (prompt || '').trim();
+
+      if (!query) {
+        return res.status(400).json({ error: 'Prompt não informado' });
+      }
+
+      const ai = getGeminiClient();
+
+      if (ai) {
+        try {
+          const systemInstruction = `Você é o KOWALSKI STUDIO AI, a inteligência artificial encarregada de personalizar e alterar dinamicamente o site "Academia de Rimas / RimaLab" em tempo real para todos os usuários.
+Sua missão é interpretar a solicitação do usuário em linguagem natural e retornar uma resposta amigável + um JSON com as propriedades exatas a serem modificadas no site.
+
+Campos suportados no objeto "updates":
+- "heroTitle": (string) Título principal da página
+- "heroHighlightWord": (string) Palavra que fica com destaque de degradê de cor
+- "heroSubtitle": (string) Subtítulo / descrição da página inicial
+- "heroGradient": ("amber-orange-red" | "purple-pink-red" | "emerald-teal-cyan" | "blue-indigo-purple" | "red-gold-yellow" | "cyberpunk-neon")
+- "ctaButtonText": (string) Texto do botão de ação principal
+- "brandName": (string) Nome da marca no topo do site
+- "brandSub": (string) Subtítulo da marca no topo
+- "topTickerText": (string) Texto do letreiro/marquee no topo
+- "announcementBanner": { "enabled": boolean, "text": string, "badge": string, "style": "red" | "amber" | "emerald" | "purple" | "blue" | "neon", "linkUrl"?: string }
+- "globalAlert": { "enabled": boolean, "title": string, "message": string, "type": "info" | "warning" | "hype" | "event", "buttonText": string }
+- "accentColor": ("amber" | "emerald" | "purple" | "red" | "cyan" | "blue" | "gold" | "neon")
+- "footerMessage": (string) Mensagem de rodapé do site
+- "customCss": (string) Código CSS global injetado diretamente no site para estilizar botões, cores de fundo, bordas, fontes, efeitos glow, etc.
+
+Responda SEMPRE em formato JSON com o seguinte schema:
+{
+  "reply": "Texto da resposta explicando o que foi feito com tom animado de hip-hop e mestre de freestyle",
+  "updates": { ...propriedades modificadas... }
+}`;
+
+          const aiResponse = await ai.models.generateContent({
+            model: 'gemini-3.7-flash',
+            contents: `Configuração atual do site:\n${JSON.stringify(currentCustomization || globalSiteCustomization, null, 2)}\n\nSolicitação do Admin/Usuário:\n"${query}"`,
+            config: {
+              systemInstruction,
+              responseMimeType: 'application/json',
+              temperature: 0.4,
+            },
+          });
+
+          if (aiResponse.text) {
+            const parsed = JSON.parse(aiResponse.text);
+            if (parsed && parsed.updates) {
+              globalSiteCustomization = {
+                ...globalSiteCustomization,
+                ...parsed.updates,
+                lastUpdated: new Date().toISOString(),
+                updatedBy: 'Kowalski Studio AI',
+              };
+              saveCustomizationToFile(globalSiteCustomization);
+              broadcastCustomizationUpdate();
+
+              return res.json({
+                success: true,
+                reply: parsed.reply || '🚀 Alterações aplicadas no site para todos os usuários!',
+                updates: parsed.updates,
+                customization: globalSiteCustomization,
+              });
+            }
+          }
+        } catch (aiErr) {
+          console.warn('Gemini chat interpretation failed, using rule engine:', aiErr);
+        }
+      }
+
+      // Rule Engine Fallback (Deterministic & Instant)
+      const lower = query.toLowerCase();
+      const updates: Partial<ServerSiteCustomization> = {};
+      const changesSummary: string[] = [];
+
+      if (lower.includes('roxo') || lower.includes('neon') || lower.includes('cyber') || lower.includes('pink')) {
+        updates.heroGradient = 'purple-pink-red';
+        changesSummary.push('Degradê Roxo Neon Cyberpunk');
+      } else if (lower.includes('verde') || lower.includes('esmeralda') || lower.includes('menta') || lower.includes('ciano')) {
+        updates.heroGradient = 'emerald-teal-cyan';
+        changesSummary.push('Degradê Esmeralda & Ciano');
+      } else if (lower.includes('azul') || lower.includes('indigo') || lower.includes('índigo')) {
+        updates.heroGradient = 'blue-indigo-purple';
+        changesSummary.push('Degradê Azul Elétrico');
+      } else if (lower.includes('sangue') || lower.includes('ouro') || lower.includes('dourado') || lower.includes('amarelo')) {
+        updates.heroGradient = 'red-gold-yellow';
+        changesSummary.push('Degradê Vermelho Sangue & Dourado');
+      } else if (lower.includes('fogo') || lower.includes('laranja') || lower.includes('âmbar') || lower.includes('ambar')) {
+        updates.heroGradient = 'amber-orange-red';
+        changesSummary.push('Degradê Âmbar Fogo');
+      }
+
+      if (lower.includes('banner') || lower.includes('aviso') || lower.includes('recado')) {
+        let bannerText = query.replace(/(adicione|coloque|bote|crie|ativar|mude o)\s+(um\s+)?(banner|aviso|recado)\s+(dizendo|que|de|:)?/i, '').trim();
+        if (bannerText.length < 5) bannerText = '🎤 Atenção MCs: Nova Mentoria e Roda de Rima aberta no Discord!';
+        updates.announcementBanner = {
+          enabled: true,
+          text: bannerText,
+          badge: 'AVISO OFICIAL',
+          style: lower.includes('sangue') || lower.includes('vermelho') ? 'red' : 'amber',
+        };
+        changesSummary.push(`Banner de aviso: "${bannerText.substring(0, 40)}..."`);
+      }
+
+      if (lower.includes('título') || lower.includes('titulo') || lower.includes('headline')) {
+        const titleMatch = query.match(/(?:para|com o título|como)\s+["'“]?([^"'”]+)["'”]?/i);
+        const newTitle = titleMatch ? titleMatch[1].trim() : query.replace(/.*(título|titulo|headline)\s*(?:para|é|como|:)?/i, '').trim();
+        if (newTitle && newTitle.length > 3) {
+          updates.heroTitle = newTitle;
+          changesSummary.push(`Título: "${newTitle}"`);
+        }
+      }
+
+      if (lower.includes('botão') || lower.includes('botao') || lower.includes('cta')) {
+        const btnMatch = query.match(/(?:para|como|com o texto)\s+["'“]?([^"'”]+)["'”]?/i);
+        const newBtn = btnMatch ? btnMatch[1].trim() : query.replace(/.*(botão|botao|cta)\s*(?:para|é|como|:)?/i, '').trim();
+        if (newBtn && newBtn.length > 2) {
+          updates.ctaButtonText = newBtn;
+          changesSummary.push(`Botão: "${newBtn}"`);
+        }
+      }
+
+      if (lower.includes('brilho') || lower.includes('glow') || lower.includes('css') || lower.includes('estilo')) {
+        updates.customCss = `
+          /* Efeito Glow aplicado pelo Kowalski Studio */
+          button, .rounded-2xl {
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.25) !important;
+          }
+        `;
+        changesSummary.push('Estilo CSS com Glow Neon');
+      }
+
+      if (Object.keys(updates).length === 0) {
+        updates.heroTitle = query.length > 8 ? query : globalSiteCustomization.heroTitle;
+        changesSummary.push('Atualização visual realizada');
+      }
+
+      globalSiteCustomization = {
+        ...globalSiteCustomization,
+        ...updates,
+        lastUpdated: new Date().toISOString(),
+        updatedBy: 'Kowalski Studio Rule Engine',
+      };
+
+      saveCustomizationToFile(globalSiteCustomization);
+      broadcastCustomizationUpdate();
+
+      res.json({
+        success: true,
+        reply: `⚡ Alterações aplicadas no site para todos os usuários em tempo real:\n\n• ${changesSummary.join('\n• ')}`,
+        updates,
+        customization: globalSiteCustomization,
+      });
+
+    } catch (err: any) {
+      console.error('Kowalski studio chat error:', err);
+      res.status(500).json({ error: 'Erro ao processar alteração no site' });
+    }
   });
 
   // --- Voice Coach / Professor Rima IA Text & Feedback API ---

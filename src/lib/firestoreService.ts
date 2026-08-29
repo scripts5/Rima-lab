@@ -96,6 +96,26 @@ export async function saveUserProfileToFirestore(profile: UserProfile): Promise<
 }
 
 /**
+ * Subscribes to real-time UserProfile changes from Firestore
+ */
+export function subscribeUserProfileFromFirestore(userId: string, onUpdate: (profile: UserProfile) => void): () => void {
+  try {
+    const profileDocRef = doc(db, 'users', userId, 'profile', 'main');
+    const unsubscribe = onSnapshot(profileDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        onUpdate(docSnap.data() as UserProfile);
+      }
+    }, (error) => {
+      console.warn('Firestore profile subscription notice:', error);
+    });
+    return unsubscribe;
+  } catch (err) {
+    console.warn('Firestore profile subscription error:', err);
+    return () => {};
+  }
+}
+
+/**
  * Loads UserProfile from Firestore
  */
 export async function loadUserProfileFromFirestore(userId?: string): Promise<UserProfile | null> {
