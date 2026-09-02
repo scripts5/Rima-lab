@@ -136,63 +136,39 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-neutral-800/80 bg-neutral-950/95 backdrop-blur-md">
-      
-      {/* Active Teacher Live Call Global Top Banner */}
-      {liveCall?.isActive && (
-        <div className="bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 px-4 py-1.5 text-xs font-bold text-white shadow-inner flex items-center justify-between">
-          <div className="flex items-center gap-2 max-w-2xl truncate">
-            <span className="flex h-2 w-2 rounded-full bg-white animate-ping shrink-0" />
-            <span className="uppercase font-black text-[10px] tracking-wider bg-black/30 px-2 py-0.5 rounded">
-              🔴 AO VIVO COM OS PROFESSORES
-            </span>
-            <span className="truncate">{liveCall.title} ({liveCall.hostName})</span>
-          </div>
-          <a
-            id="join-live-banner-btn"
-            href={liveCall.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 bg-black hover:bg-neutral-900 text-amber-400 text-[11px] font-black px-3 py-1 rounded-full shadow transition-transform hover:scale-105 shrink-0"
-          >
-            <Video className="h-3.5 w-3.5 text-amber-400" />
-            <span>Entrar na Chamada de Vídeo</span>
-          </a>
-        </div>
-      )}
-
       {/* Main Top Header Bar with Brand, Primary Tabs, and Action Controls */}
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-3 sm:px-6 py-2.5 gap-2">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-3 sm:px-6 py-2 gap-2">
         
         {/* Logo & Brand */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             id="brand-logo-btn"
             onClick={() => setActiveTab('onboarding')}
-            className="flex items-center gap-2.5 text-left group focus:outline-none"
-            title="Ir para o Dashboard de Apresentação & Início"
+            className="flex items-center gap-2 sm:gap-2.5 text-left group focus:outline-none"
+            title="Ir para o Início"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-red-600 shadow-lg shadow-amber-500/20 text-neutral-950 font-black text-xl tracking-tighter transition-transform group-hover:scale-105">
-              <Mic className="h-5 w-5 text-neutral-950" />
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-red-600 shadow-md shadow-amber-500/20 text-neutral-950 font-black text-lg tracking-tighter transition-transform group-hover:scale-105 shrink-0">
+              <Mic className="h-4 w-4 sm:h-4.5 sm:w-4.5 text-neutral-950" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-display text-lg font-extrabold tracking-tight text-white">
+                <span className="font-display text-sm sm:text-base font-extrabold tracking-tight text-white truncate max-w-[140px] sm:max-w-none">
                   {customization.brandName || 'Academia de Rimas'}
                 </span>
-                <span className="rounded bg-[#5865F2]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#8ea1e1] border border-[#5865F2]/40">
-                  Discord Server
+                <span className="hidden xs:inline-flex rounded bg-[#5865F2]/20 px-1.5 py-0.5 text-[9px] font-bold text-[#8ea1e1] border border-[#5865F2]/30 shrink-0">
+                  Discord
                 </span>
               </div>
-              <p className="hidden text-[10px] text-amber-400/90 font-medium sm:block">
+              <p className="hidden md:block text-[10px] text-amber-400/90 font-medium">
                 Por Kowalski MC & Luquita MC
               </p>
             </div>
           </button>
         </div>
 
-        {/* Center Desktop Primary Navigation Tabs */}
-        <nav className="hidden xl:flex items-center gap-1 bg-neutral-900/90 p-1 rounded-xl border border-neutral-800">
-          {mainNavTabs.map((tab) => {
+        {/* Center Desktop Primary Navigation Tabs (visible on lg+) */}
+        <nav className="hidden lg:flex items-center gap-1 bg-neutral-900/90 p-1 rounded-xl border border-neutral-800">
+          {mainNavTabs.slice(0, 7).map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -200,7 +176,7 @@ export const Header: React.FC<HeaderProps> = ({
                 key={tab.id}
                 id={`main-nav-tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                   isActive
                     ? 'bg-amber-500 text-neutral-950 shadow-md font-black'
                     : 'text-neutral-300 hover:text-white hover:bg-neutral-800/80'
@@ -209,7 +185,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-neutral-950' : 'text-neutral-400'}`} />
                 <span>{tab.label}</span>
                 {tab.badge && (
-                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-black ${
+                  <span className={`text-[8px] px-1 py-0.2 rounded font-black ${
                     tab.isLive 
                       ? 'bg-red-500 text-white animate-pulse' 
                       : isActive 
@@ -224,8 +200,8 @@ export const Header: React.FC<HeaderProps> = ({
           })}
         </nav>
 
-        {/* Right Side Controls (PWA Install, Duolingo Notifications, Streak, Level, Beat Player, Prof & Admin Buttons) */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {/* Right Side Controls (Duolingo Notifications, Streak, Beat Player, PWA & Tools) */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           
           {/* Duolingo Notification Center Bell */}
           <DuolingoNotificationCenter
@@ -238,25 +214,25 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Streak Badge */}
           <div 
-            className="flex items-center gap-1 rounded-lg bg-orange-500/10 border border-orange-500/30 px-2 py-1 text-xs font-bold text-orange-400"
+            className="flex items-center gap-1 rounded-lg bg-orange-500/10 border border-orange-500/30 px-1.5 sm:px-2 py-1 text-xs font-bold text-orange-400 shrink-0"
             title="Sequência de dias praticando rima"
           >
-            <Flame className="h-3.5 w-3.5 fill-orange-500 text-orange-500" />
+            <Flame className="h-3.5 w-3.5 fill-orange-500 text-orange-500 shrink-0" />
             <span>{streak}d</span>
           </div>
 
-          {/* Level Progress */}
+          {/* Level Progress (Desktop only) */}
           <div 
             onClick={() => setActiveTab('profile')}
-            className="hidden sm:flex items-center gap-2 rounded-lg bg-neutral-900 border border-neutral-800 px-2.5 py-1 text-xs cursor-pointer hover:border-amber-500/50 transition-colors"
+            className="hidden xl:flex items-center gap-2 rounded-lg bg-neutral-900 border border-neutral-800 px-2 py-1 text-xs cursor-pointer hover:border-amber-500/50 transition-colors shrink-0"
             title={`Nível ${level} (${totalXP} XP Total) - Clique para ver Perfil`}
           >
-            <Zap className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+            <Zap className="h-3 w-3 text-amber-400 fill-amber-400" />
             <div className="text-left">
-              <span className="font-bold text-white block text-[11px] leading-tight">
+              <span className="font-bold text-white block text-[10px] leading-tight">
                 Nv. {level}
               </span>
-              <div className="mt-0.5 h-1.5 w-12 rounded-full bg-neutral-800 overflow-hidden">
+              <div className="mt-0.5 h-1 w-10 rounded-full bg-neutral-800 overflow-hidden">
                 <div 
                   className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
                   style={{ width: `${progressPercent}%` }}
@@ -265,12 +241,12 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Global Beat Player Pill */}
-          <div className="flex items-center gap-1.5 rounded-lg bg-neutral-900/90 border border-neutral-800 px-2 py-1">
+          {/* Global Beat Player Pill (Compact on Mobile, Full on Desktop) */}
+          <div className="flex items-center gap-1 rounded-lg bg-neutral-900/90 border border-neutral-800 p-1 sm:px-2">
             <button
               id="header-toggle-beat-btn"
               onClick={onToggleBeat}
-              className={`flex h-6 w-6 items-center justify-center rounded-md transition-all ${
+              className={`flex h-6 w-6 items-center justify-center rounded-md transition-all shrink-0 ${
                 isPlayingBeat
                   ? 'bg-amber-500 text-neutral-950 font-black scale-105 animate-pulse'
                   : 'bg-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-700'
@@ -282,46 +258,45 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               id="header-current-beat-btn"
               onClick={() => setActiveTab('bot')}
-              className="text-left group focus:outline-none"
+              className="hidden sm:block text-left group focus:outline-none pl-1"
               title="Abrir o Bot de Beats no Discord"
             >
               <div className="flex items-center gap-1">
-                <span className="text-[10px] font-mono text-neutral-400">Beat:</span>
-                <span className="max-w-[70px] sm:max-w-[90px] truncate text-[11px] font-bold text-amber-400 group-hover:underline">
-                  {currentBeatTitle || 'Boom Bap 90s'}
+                <span className="max-w-[75px] md:max-w-[95px] truncate text-[10px] font-bold text-amber-400 group-hover:underline">
+                  {currentBeatTitle || 'Beat'}
                 </span>
               </div>
             </button>
           </div>
 
-          {/* PROF BUTTON (Renamed from Admin, for professors Luquita & Kowalski) */}
+          {/* PROF BUTTON */}
           <button
             id="header-prof-btn"
             onClick={onOpenAdmin}
             title="Painel dos Professores (Kowalski MC & Luquita MC)"
-            className="flex items-center gap-1 h-8 px-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors font-bold text-xs"
+            className="flex items-center gap-1 h-7 sm:h-8 px-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-colors font-bold text-[11px] shrink-0"
           >
             <GraduationCap className="h-3.5 w-3.5 text-amber-400" />
             <span className="hidden sm:inline">Prof</span>
           </button>
 
-          {/* ADMIN BUTTON (Kowalski Studio - Site Customization & Chat AI) */}
+          {/* ADMIN BUTTON */}
           {onOpenStudioConfig && (
             <button
               id="header-admin-studio-btn"
               onClick={onOpenStudioConfig}
-              title="Kowalski Studio - Chat IA & Modificação Visual do Site"
-              className="flex items-center gap-1 h-8 px-2.5 rounded-lg border border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-amber-500/50 hover:text-amber-300 transition-colors font-bold text-xs"
+              title="Kowalski Studio - Chat IA & Configurações"
+              className="hidden sm:flex items-center gap-1 h-7 sm:h-8 px-2 rounded-lg border border-neutral-700 bg-neutral-900 text-neutral-200 hover:border-amber-500/50 hover:text-amber-300 transition-colors font-bold text-[11px] shrink-0"
             >
-              <Settings className="h-3.5 w-3.5 text-amber-400" />
+              <Settings className="h-3 w-3 text-amber-400" />
               <span className="hidden md:inline">Admin</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* SECONDARY HEADER: Medium Screen Primary Tabs (visible when screen < xl) */}
-      <div className="xl:hidden border-t border-neutral-800/80 bg-neutral-900/70 px-3 py-1.5 flex items-center gap-1 overflow-x-auto scrollbar-none">
+      {/* SECONDARY HEADER: Navigation Tabs Bar for Mobile & Medium screens */}
+      <div className="lg:hidden border-t border-neutral-800/80 bg-neutral-950/80 px-2 py-1.5 flex items-center gap-1 overflow-x-auto scrollbar-none">
         {mainNavTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -329,17 +304,17 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all shrink-0 ${
                 isActive
                   ? 'bg-amber-500 text-neutral-950 font-black shadow'
-                  : 'text-neutral-300 hover:text-white hover:bg-neutral-800'
+                  : 'text-neutral-300 hover:text-white hover:bg-neutral-800/60'
               }`}
             >
               <Icon className={`h-3 w-3 ${isActive ? 'text-neutral-950' : 'text-neutral-400'}`} />
               <span>{tab.label}</span>
               {tab.badge && (
                 <span className={`text-[8px] px-1 py-0.2 rounded font-black ${
-                  tab.isLive ? 'bg-red-500 text-white' : 'bg-black/30 text-neutral-900'
+                  tab.isLive ? 'bg-red-500 text-white animate-pulse' : 'bg-black/30 text-neutral-900'
                 }`}>
                   {tab.badge}
                 </span>
@@ -347,142 +322,70 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           );
         })}
-        
-        {/* Mobile Prof & Admin Buttons */}
-        <button
-          onClick={onOpenAdmin}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-amber-300 bg-amber-950/60 border border-amber-500/40 whitespace-nowrap"
-        >
-          <GraduationCap className="h-3 w-3" />
-          <span>Prof</span>
-        </button>
-
-        {onOpenStudioConfig && (
-          <button
-            onClick={onOpenStudioConfig}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-neutral-200 bg-neutral-900 border border-neutral-700 whitespace-nowrap"
-          >
-            <Settings className="h-3 w-3 text-amber-400" />
-            <span>Admin</span>
-          </button>
-        )}
       </div>
 
-      {/* DISCORD SERVER CATEGORIES & SUB-CHANNELS BAR */}
-      <div className="border-t border-neutral-800/80 bg-[#0e0e12]/95 px-3 sm:px-6 py-2 flex flex-col gap-2 shadow-inner">
-        
-        {/* Categories Selector Row */}
-        <div className="flex items-center justify-between gap-2 overflow-x-auto scrollbar-none pb-0.5">
-          
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              id="open-discord-browser-btn"
-              onClick={() => setIsServerBrowserOpen(!isServerBrowserOpen)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                isServerBrowserOpen 
-                  ? 'bg-[#5865F2] text-white shadow-md' 
-                  : 'text-[#8ea1e1] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/30'
-              }`}
-              title="Abrir Navegador Completo de Canais do Servidor"
-            >
-              <Compass className="h-3.5 w-3.5 text-indigo-300" />
-              <span>Canais ({filterStats.unlockedChannelsCount})</span>
-              <ChevronDown className={`h-3 w-3 transition-transform ${isServerBrowserOpen ? 'rotate-180' : ''}`} />
-            </button>
-            <div className="h-4 w-px bg-neutral-800 mx-1" />
-          </div>
-
-          {/* Category Pills */}
-          <div className="flex items-center gap-1 flex-1 overflow-x-auto scrollbar-none">
-            {discordCategories.map((cat) => {
-              const isCategoryActive = activeDiscordCategory?.id === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  id={`cat-nav-${cat.id}`}
-                  onClick={() => {
-                    setActiveDiscordCategoryId(cat.id);
-                    if (cat.channels.length > 0) {
-                      openChannel(cat.channels[0]);
-                    }
-                  }}
-                  className={`relative flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                    isCategoryActive
-                      ? 'bg-amber-500 text-neutral-950 shadow-md font-black scale-105'
-                      : 'text-neutral-300 bg-neutral-900/80 border border-neutral-800/80 hover:text-white hover:bg-neutral-800'
-                  }`}
-                  title={cat.description}
-                >
-                  <span>{cat.emoji}</span>
-                  <span>{cat.shortName}</span>
-                  <span className={`text-[10px] px-1 py-0.2 rounded font-mono ${
-                    isCategoryActive ? 'bg-black/30 text-neutral-950 font-black' : 'bg-neutral-800 text-neutral-400'
-                  }`}>
-                    {cat.channels.length}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* User Role Tag & Role Switcher */}
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="hidden lg:flex items-center gap-1 bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded-lg text-[10px]">
-              <span className="text-neutral-400">Cargo:</span>
-              <span className="font-bold text-amber-300">{activeRoles[0] || 'MC Rimador'}</span>
-            </div>
-            
-            <button
-              onClick={() => setActiveTab('tracks')}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold text-neutral-300 hover:text-white bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 transition-colors shrink-0"
-              title="Personalizar Cargos e Trilha de Estudos"
-            >
-              <Target className="h-3 w-3 text-amber-400" />
-              <span className="hidden sm:inline">Trilhas</span>
-            </button>
-          </div>
+      {/* DISCORD SERVER CATEGORIES BAR (Clean & Compact) */}
+      <div className="border-t border-neutral-800/80 bg-[#0c0c10]/95 px-3 sm:px-6 py-1.5 flex items-center justify-between gap-2 shadow-inner overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            id="open-discord-browser-btn"
+            onClick={() => setIsServerBrowserOpen(!isServerBrowserOpen)}
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold transition-all ${
+              isServerBrowserOpen 
+                ? 'bg-[#5865F2] text-white shadow' 
+                : 'text-[#8ea1e1] bg-[#5865F2]/10 hover:bg-[#5865F2]/20 border border-[#5865F2]/30'
+            }`}
+            title="Abrir Navegador Completo de Canais do Servidor"
+          >
+            <Compass className="h-3 w-3 text-indigo-300" />
+            <span>Canais ({filterStats.unlockedChannelsCount})</span>
+            <ChevronDown className={`h-3 w-3 transition-transform ${isServerBrowserOpen ? 'rotate-180' : ''}`} />
+          </button>
+          <div className="h-3.5 w-px bg-neutral-800 mx-1 hidden sm:block" />
         </div>
 
-        {/* Sub-Channels list for the currently selected Discord category */}
-        {activeDiscordCategory && activeDiscordCategory.channels.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pt-0.5">
-            <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider shrink-0 flex items-center gap-1">
-              <span>{activeDiscordCategory.emoji}</span>
-              <span className="hidden sm:inline">Salas:</span>
-            </span>
+        {/* Category Pills */}
+        <div className="flex items-center gap-1 flex-1 overflow-x-auto scrollbar-none">
+          {discordCategories.map((cat) => {
+            const isCategoryActive = activeDiscordCategory?.id === cat.id;
+            return (
+              <button
+                key={cat.id}
+                id={`cat-nav-${cat.id}`}
+                onClick={() => {
+                  setActiveDiscordCategoryId(cat.id);
+                  if (cat.channels.length > 0) {
+                    openChannel(cat.channels[0]);
+                  }
+                }}
+                className={`relative flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap ${
+                  isCategoryActive
+                    ? 'bg-amber-500 text-neutral-950 shadow font-black'
+                    : 'text-neutral-300 bg-neutral-900/80 border border-neutral-800/80 hover:text-white hover:bg-neutral-800'
+                }`}
+                title={cat.description}
+              >
+                <span>{cat.emoji}</span>
+                <span>{cat.shortName}</span>
+                <span className={`text-[9px] px-1 py-0.1 rounded font-mono ${
+                  isCategoryActive ? 'bg-black/30 text-neutral-950 font-black' : 'bg-neutral-800 text-neutral-400'
+                }`}>
+                  {cat.channels.length}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-            {activeDiscordCategory.channels.map((channel) => {
-              const isChannelSelected = activeChannelId === channel.id;
-              const hasBadge = channel.isLive || channel.isCallActive;
-              return (
-                <button
-                  key={channel.id}
-                  id={`channel-pill-${channel.id.replace(/[^a-zA-Z0-9]/g, '-')}`}
-                  onClick={() => openChannel(channel)}
-                  className={`group relative flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                    isChannelSelected
-                      ? 'bg-[#5865F2] text-white shadow-md font-bold'
-                      : 'bg-neutral-950/70 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800/80'
-                  }`}
-                  title={`${channel.name} — ${channel.description}`}
-                >
-                  {getChannelIcon(channel.type, channel.isLive || channel.isCallActive)}
-                  <span className="truncate max-w-[150px] sm:max-w-[200px]">{channel.name}</span>
-                  
-                  {hasBadge && (
-                    <span className="flex h-2 w-2 rounded-full bg-red-500 animate-ping shrink-0" />
-                  )}
-                  {channel.userCount && channel.userCount > 0 ? (
-                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1 rounded font-mono">
-                      {channel.userCount}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
+        {/* Trilhas / Cargos Switcher */}
+        <button
+          onClick={() => setActiveTab('tracks')}
+          className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold text-neutral-300 hover:text-white bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 transition-colors shrink-0"
+          title="Personalizar Cargos e Trilha de Estudos"
+        >
+          <Target className="h-3 w-3 text-amber-400" />
+          <span>Trilhas</span>
+        </button>
       </div>
 
       {/* FULL DISCORD SERVER BROWSER MODAL / DRAWER */}

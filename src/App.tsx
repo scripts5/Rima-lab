@@ -741,47 +741,45 @@ export function App() {
 
       {/* Global Real-Time Live Call Broadcast Banner (When Teacher is Live on Discord / Meet) */}
       {liveCall?.isActive && liveCall.url && !isLiveBannerDismissed && (
-        <div className="relative z-30 border-b border-red-500/50 bg-gradient-to-r from-red-950/90 via-neutral-900/95 to-red-950/90 px-4 py-2.5 shadow-lg shadow-red-950/30 backdrop-blur-md animate-in slide-in-from-top-2 duration-300">
-          <div className="mx-auto max-w-7xl flex flex-col md:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3 text-center md:text-left">
-              <span className="flex h-3 w-3 shrink-0 rounded-full bg-red-500 animate-ping" />
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
-                <span className="rounded-full bg-red-600 px-2.5 py-0.5 text-[10px] font-black uppercase text-white tracking-wider shadow-sm shadow-red-600/50">
-                  🔴 AO VIVO NO DISCORD / CALL
-                </span>
-                <span className="text-xs font-bold text-white">
-                  {liveCall.title || 'Aulas & Mentoria com os Professores'}
-                </span>
-                <span className="hidden sm:inline text-xs text-neutral-400">
-                  • por <strong className="text-amber-400">{liveCall.hostName || 'Kowalski MC & Luquita MC'}</strong>
-                </span>
-              </div>
+        <div className="relative z-30 border-b border-red-500/40 bg-gradient-to-r from-red-950/95 via-neutral-950 to-red-950/95 px-3 py-1.5 shadow-md shadow-red-950/30 backdrop-blur-md animate-in slide-in-from-top-2 duration-300">
+          <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 truncate min-w-0">
+              <span className="flex h-2 w-2 shrink-0 rounded-full bg-red-500 animate-ping" />
+              <span className="rounded bg-red-600 px-1.5 py-0.5 text-[9px] font-black uppercase text-white tracking-wider shrink-0">
+                AO VIVO
+              </span>
+              <span className="text-white font-bold text-[11px] sm:text-xs truncate">
+                {liveCall.title || 'Aulas & Mentoria com os Professores'}
+              </span>
+              <span className="hidden md:inline text-neutral-400 text-[11px] truncate">
+                • {liveCall.hostName || 'Kowalski MC & Luquita MC'}
+              </span>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
               <a
                 href={/^https?:\/\//i.test(liveCall.url) ? liveCall.url : `https://${liveCall.url}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-600 px-3.5 py-1.5 text-xs font-black text-white hover:from-red-500 hover:to-amber-500 shadow-md shadow-red-600/40 transition-all hover:scale-105 active:scale-95"
+                className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-red-600 to-amber-600 px-2.5 py-1 text-[10px] sm:text-[11px] font-black text-white hover:brightness-110 shadow transition-all active:scale-95"
               >
-                <span>Entrar no Discord Agora</span>
-                <ExternalLink className="h-3.5 w-3.5" />
+                <span>Entrar no Discord</span>
+                <ExternalLink className="h-3 w-3" />
               </a>
 
               <button
                 onClick={() => setActiveTab('calls')}
-                className="flex items-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-800/90 px-3 py-1.5 text-xs font-bold text-neutral-200 hover:bg-neutral-700 hover:text-white transition-colors"
+                className="flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-800 px-2 py-1 text-[10px] sm:text-[11px] font-bold text-neutral-200 hover:bg-neutral-700 transition-colors"
                 title="Abrir Sala de Calls no RimaLab"
               >
-                <Video className="h-3.5 w-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Sala de Calls</span>
+                <Video className="h-3 w-3 text-amber-400" />
+                <span className="hidden xs:inline">Calls</span>
               </button>
 
               <button
                 onClick={() => setIsLiveBannerDismissed(true)}
                 className="rounded-lg p-1 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
-                title="Minimizar aviso temporariamente"
+                title="Minimizar aviso"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
