@@ -58,6 +58,15 @@ import {
   AIVoiceProfessorModal 
 } from './components/AIVoiceProfessorModal';
 import { 
+  PWAInstallPrompt 
+} from './components/PWAInstallPrompt';
+import { 
+  OfflineIndicator 
+} from './components/OfflineIndicator';
+import { 
+  PhoneNotificationPermissionModal 
+} from './components/PhoneNotificationPermissionModal';
+import { 
   UserProfile, 
   Subscription, 
   Lesson, 
@@ -135,7 +144,7 @@ export function App() {
       id: 'live_default',
       isActive: true,
       platform: 'discord',
-      url: 'https://discord.gg/rimalab',
+      url: 'https://discord.gg/xXEEtTZzd',
       title: 'Aula ao Vivo de Métrica & Freestyle',
       description: 'Entre para rimar no beat e receber feedback com Kowalski MC & Luquita MC!',
       hostName: 'Luquita MC & Kowalski MC',
@@ -573,7 +582,7 @@ export function App() {
 
   // Handler: Update Live Call from Admin
   const handleUpdateLiveCall = async (callData: Partial<LiveCallSession>): Promise<boolean> => {
-    const rawUrl = (callData.url || liveCall?.url || 'https://discord.gg/rimalab').trim();
+    const rawUrl = (callData.url || liveCall?.url || 'https://discord.gg/xXEEtTZzd').trim();
     const cleanUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
 
     const updated: LiveCallSession = {
@@ -685,6 +694,15 @@ export function App() {
       >
         <div className="min-h-screen bg-[#0a0a0c] text-neutral-100 font-sans selection:bg-amber-500 selection:text-neutral-950 flex flex-col">
           
+          {/* PWA Offline Connectivity Indicator */}
+          <OfflineIndicator />
+
+          {/* Phone / APK System Notification Permission Prompt */}
+          <PhoneNotificationPermissionModal currentStreak={profile.streak} />
+
+          {/* PWA Floating Install Banner for Mobile & Desktop */}
+          <PWAInstallPrompt variant="banner" />
+
           {/* Toast Notification */}
           {toastMessage && (
             <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-neutral-900/95 p-4 shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom-5 duration-300">

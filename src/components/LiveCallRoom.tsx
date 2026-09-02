@@ -331,7 +331,7 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
   const [discordStatus, setDiscordStatus] = useState<DiscordServerStatus>({
     guildId: '1522381290001928242',
     serverName: '🎤 Academia de Rimas',
-    instantInvite: 'https://discord.gg/7s4Tdd9bz',
+    instantInvite: 'https://discord.gg/xXEEtTZzd',
     widgetUrl: 'https://discord.com/widget?id=1522381290001928242&theme=dark',
     presenceCount: 0,
     isLiveCallActive: false,
@@ -449,9 +449,9 @@ export const LiveCallRoom: React.FC<LiveCallRoomProps> = ({
   }, []);
 
   const isCallActive = liveCall ? (liveCall.isActive !== false) : false;
-  const rawUrl = (liveCall?.url || 'https://discord.gg/7s4Tdd9bz').trim();
+  const rawUrl = (liveCall?.url || 'https://discord.gg/xXEEtTZzd').trim();
   const currentUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-  const inviteUrl = discordStatus.instantInvite || 'https://discord.gg/7s4Tdd9bz';
+  const inviteUrl = discordStatus.instantInvite || 'https://discord.gg/xXEEtTZzd';
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(currentUrl);

@@ -42,6 +42,8 @@ import {
 import { UserProfile, Subscription, LiveCallSession } from '../types';
 import { useNavigation, NavTabId, DiscordCategory, DiscordChannel } from '../context/NavigationContext';
 import { useSiteCustomization } from '../context/SiteCustomizationContext';
+import { DuolingoNotificationCenter } from './DuolingoNotificationCenter';
+import { PWAInstallPrompt } from './PWAInstallPrompt';
 
 interface HeaderProps {
   activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions' | 'tracks';
@@ -222,9 +224,18 @@ export const Header: React.FC<HeaderProps> = ({
           })}
         </nav>
 
-        {/* Right Side Controls (Streak, Level, Beat Player, Prof & Admin Buttons) */}
+        {/* Right Side Controls (PWA Install, Duolingo Notifications, Streak, Level, Beat Player, Prof & Admin Buttons) */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           
+          {/* Duolingo Notification Center Bell */}
+          <DuolingoNotificationCenter
+            currentStreak={streak}
+            onNavigateToTab={(tabId) => setActiveTab(tabId as any)}
+          />
+
+          {/* PWA Install Button in Header */}
+          <PWAInstallPrompt variant="navbar" />
+
           {/* Streak Badge */}
           <div 
             className="flex items-center gap-1 rounded-lg bg-orange-500/10 border border-orange-500/30 px-2 py-1 text-xs font-bold text-orange-400"

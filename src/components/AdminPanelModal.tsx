@@ -108,7 +108,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [platform, setPlatform] = useState<'whatsapp' | 'discord' | 'meet' | 'zoom' | 'custom'>(
     currentLiveCall?.platform || 'discord'
   );
-  const [callUrl, setCallUrl] = useState(currentLiveCall?.url || 'https://discord.gg/7s4Tdd9bz');
+  const [callUrl, setCallUrl] = useState(currentLiveCall?.url || 'https://discord.gg/xXEEtTZzd');
   const [callTitle, setCallTitle] = useState(
     currentLiveCall?.title || 'Aula ao Vivo de Métrica & Freestyle com Luquita MC & Kowalski MC'
   );
@@ -416,7 +416,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const setPlatformQuickTemplate = (p: 'discord' | 'whatsapp' | 'meet') => {
     setPlatform(p);
     if (p === 'discord') {
-      setCallUrl('https://discord.gg/7s4Tdd9bz');
+      setCallUrl('https://discord.gg/xXEEtTZzd');
       setCallTitle('🎤 Aula de Freestyle & Cypher no Servidor Discord');
       setCallDescription('Entre na sala de voz da Academia de Rimas para rimar nos beats.');
     } else if (p === 'whatsapp') {

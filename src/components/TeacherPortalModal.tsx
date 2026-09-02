@@ -101,7 +101,7 @@ export const TeacherPortalModal: React.FC<TeacherPortalModalProps> = ({
   const [isSubmittingAward, setIsSubmittingAward] = useState<boolean>(false);
 
   // Live Call Editor State
-  const [liveUrl, setLiveUrl] = useState<string>(currentLiveCall?.url || 'https://discord.gg/rimalab');
+  const [liveUrl, setLiveUrl] = useState<string>(currentLiveCall?.url || 'https://discord.gg/xXEEtTZzd');
   const [liveTitle, setLiveTitle] = useState<string>(currentLiveCall?.title || 'Mentoria ao Vivo de Freestyle & Métrica');
   const [liveHost, setLiveHost] = useState<string>(loggedTeacher?.fullName || 'Kowalski MC & Professores');
   const [livePlatform, setLivePlatform] = useState<'discord' | 'meet' | 'whatsapp' | 'zoom' | 'custom'>(currentLiveCall?.platform || 'discord');
