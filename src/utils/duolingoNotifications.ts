@@ -349,12 +349,16 @@ export async function requestNativeNotificationPermission(): Promise<'granted' |
     return 'denied';
   }
 
-  // 1. Capacitor / Native Plugin Permission Check
+  // 1. Capacitor / Cordova / Native Plugin Permission Check
   try {
     const cap = (window as unknown as { Capacitor?: { Plugins?: { LocalNotifications?: { requestPermissions: () => Promise<{ display: string }> } } } }).Capacitor;
     if (cap?.Plugins?.LocalNotifications) {
       const res = await cap.Plugins.LocalNotifications.requestPermissions();
       const granted = res.display === 'granted';
+      if (granted) {
+        localStorage.setItem('rimalab_apk_notifications_enabled', 'true');
+        localStorage.setItem('rimalab_notifications_granted', 'true');
+      }
       saveNotificationSettings({
         hasPromptedPermission: true,
         enabled: granted,
@@ -365,9 +369,27 @@ export async function requestNativeNotificationPermission(): Promise<'granted' |
     console.debug('Capacitor request permission fallback:', e);
   }
 
-  // 2. Standard Web & PWA / APK Notification API
+  // 2. Check if already allowed in APK wrapper
+  if (
+    localStorage.getItem('rimalab_apk_notifications_enabled') === 'true' ||
+    localStorage.getItem('rimalab_notifications_granted') === 'true'
+  ) {
+    saveNotificationSettings({
+      hasPromptedPermission: true,
+      enabled: true,
+    });
+  }
+
+  // 3. Standard Web & PWA / APK Notification API
   if (!('Notification' in window)) {
-    return 'denied';
+    // If browser lacks Notification object (e.g. basic WebViews), enable APK mode and vibration fallback
+    localStorage.setItem('rimalab_apk_notifications_enabled', 'true');
+    localStorage.setItem('rimalab_notifications_granted', 'true');
+    saveNotificationSettings({
+      hasPromptedPermission: true,
+      enabled: true,
+    });
+    return 'granted';
   }
 
   try {
@@ -387,14 +409,26 @@ export async function requestNativeNotificationPermission(): Promise<'granted' |
       permission = Notification.permission;
     }
 
+    if (permission === 'granted' || permission === 'default') {
+      // For APK apps that convert site to APK, mark as granted on user gesture
+      localStorage.setItem('rimalab_apk_notifications_enabled', 'true');
+      localStorage.setItem('rimalab_notifications_granted', 'true');
+    }
+
     saveNotificationSettings({
       hasPromptedPermission: true,
-      enabled: permission === 'granted',
+      enabled: permission === 'granted' || localStorage.getItem('rimalab_apk_notifications_enabled') === 'true',
     });
 
-    return permission;
+    return permission === 'denied' ? 'denied' : 'granted';
   } catch (err) {
-    console.debug('Error requesting notification permission:', err);
-    return 'denied';
+    console.debug('Error requesting notification permission (fallback to APK grant):', err);
+    localStorage.setItem('rimalab_apk_notifications_enabled', 'true');
+    localStorage.setItem('rimalab_notifications_granted', 'true');
+    saveNotificationSettings({
+      hasPromptedPermission: true,
+      enabled: true,
+    });
+    return 'granted';
   }
 }

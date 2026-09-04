@@ -12,18 +12,23 @@ export function usePWAInstall() {
   const [isAndroid, setIsAndroid] = useState(false);
 
   useEffect(() => {
-    // Detect standalone mode (already installed as PWA or running in webview)
+    // Detect standalone mode, PWA, or running inside Android WebView APK
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const isAndroidDevice = /android/.test(userAgent);
+    const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
+
+    const isWebView = 
+      /wv|webview/.test(userAgent) ||
+      (isAndroidDevice && /version\/[0-9.]+\s+chrome\/[0-9.]+\s+mobile/i.test(userAgent) && !/chrome\/[0-9.]+\s+mobile\s+safari/i.test(userAgent)) ||
+      (typeof window !== 'undefined' && ((window as any).Android || (window as any).AndroidInterface || (window as any).isNativeApp));
+
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-      document.referrer.includes('android-app://');
+      document.referrer.includes('android-app://') ||
+      Boolean(isWebView);
+
     setIsInstalled(isStandalone);
-
-    // Detect mobile OS
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
-    const isAndroidDevice = /android/.test(userAgent);
-
     setIsIOS(isIOSDevice);
     setIsAndroid(isAndroidDevice);
 

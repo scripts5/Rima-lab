@@ -119,7 +119,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [isActive, setIsActive] = useState(currentLiveCall ? currentLiveCall.isActive : true);
 
   // Admin / Prof Tabs
-  const [activeTab, setActiveTab] = useState<'live_call' | 'student_evolution' | 'whitelist_gmails' | 'ip_trials'>('whitelist_gmails');
+  const [activeTab, setActiveTab] = useState<'live_call' | 'student_evolution' | 'whitelist_gmails' | 'ip_trials' | 'teachers_approval'>('whitelist_gmails');
 
   // Whitelist & Authorized Gmails State (Kowalski Master Control)
   const [authorizedGmailsList, setAuthorizedGmailsList] = useState<any[]>([]);
@@ -128,6 +128,20 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [allowAllGmails, setAllowAllGmails] = useState<boolean>(false);
   const [isFetchingWhitelist, setIsFetchingWhitelist] = useState<boolean>(false);
   const [whitelistSearchFilter, setWhitelistSearchFilter] = useState<string>('');
+
+  // Teacher Approval & Management State (Kowalski Master Control)
+  const [teacherRequestsList, setTeacherRequestsList] = useState<any[]>([]);
+  const [approvedTeachersList, setApprovedTeachersList] = useState<any[]>([]);
+  const [dispatchedEmailsList, setDispatchedEmailsList] = useState<any[]>([]);
+  const [isFetchingTeachers, setIsFetchingTeachers] = useState<boolean>(false);
+  const [newTeacherName, setNewTeacherName] = useState('');
+  const [newTeacherEmail, setNewTeacherEmail] = useState('');
+  const [newTeacherDiscipline, setNewTeacherDiscipline] = useState('Métrica & Freestyle');
+  const [newTeacherArtistic, setNewTeacherArtistic] = useState('');
+  const [isAddingTeacher, setIsAddingTeacher] = useState(false);
+  const [smtpTestEmail, setSmtpTestEmail] = useState('kowalski.madagascar123@gmail.com');
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+  const [smtpStatusResult, setSmtpStatusResult] = useState<any>(null);
 
   // Add new Gmail form state
   const [newGmailInput, setNewGmailInput] = useState<string>('');
@@ -182,6 +196,194 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       console.warn('Could not fetch whitelist data:', err);
     } finally {
       setIsFetchingWhitelist(false);
+    }
+  };
+
+  // Fetch Teacher data from backend
+  const fetchTeacherData = async () => {
+    setIsFetchingTeachers(true);
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/teachers/requests', {
+        headers: {
+          'x-admin-password': '36737829',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-email': userEmail || 'kowalski.madagascar123@gmail.com',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setTeacherRequestsList(data.allRequests || data.pendingRequests || []);
+          setApprovedTeachersList(data.approvedTeachers || []);
+          setDispatchedEmailsList(data.dispatchedEmails || []);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch teacher data:', err);
+    } finally {
+      setIsFetchingTeachers(false);
+    }
+  };
+
+  // Teacher Approval Handlers
+  const handleApproveTeacher = async (targetEmail: string) => {
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/teachers/approve-manual', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          email: targetEmail,
+          password: '36737829',
+          adminToken: storedToken,
+          adminEmail: userEmail || 'kowalski.madagascar123@gmail.com',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onShowToast('✅ Professor Aprovado!', `Acesso liberado com sucesso para ${targetEmail}`, 'success');
+        fetchTeacherData();
+        fetchWhitelistData();
+      } else {
+        onShowToast('❌ Erro', data.error || 'Não foi possível aprovar o professor.', 'error');
+      }
+    } catch (err: any) {
+      onShowToast('❌ Erro de Conexão', err.message, 'error');
+    }
+  };
+
+  const handleRejectTeacher = async (targetEmail: string) => {
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/teachers/reject-manual', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          email: targetEmail,
+          password: '36737829',
+          adminToken: storedToken,
+          adminEmail: userEmail || 'kowalski.madagascar123@gmail.com',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onShowToast('Recusado', `Solicitação de ${targetEmail} foi recusada.`, 'info');
+        fetchTeacherData();
+      }
+    } catch (err: any) {
+      onShowToast('❌ Erro', err.message, 'error');
+    }
+  };
+
+  const handleDirectAddTeacherSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTeacherEmail || !newTeacherEmail.includes('@') || !newTeacherName.trim()) {
+      onShowToast('❌ Campos Obrigatórios', 'Nome e E-mail do professor são obrigatórios.', 'error');
+      return;
+    }
+
+    setIsAddingTeacher(true);
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      
+      // 1. Approve as teacher
+      await fetch('/api/admin/teachers/approve-manual', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          email: newTeacherEmail.trim().toLowerCase(),
+          password: '36737829',
+          adminToken: storedToken,
+          adminEmail: userEmail || 'kowalski.madagascar123@gmail.com',
+        }),
+      });
+
+      // 2. Whitelist Gmail as TEACHER with UNLIMITED plan
+      await fetch('/api/admin/authorized-gmails/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          password: '36737829',
+          adminToken: storedToken,
+          email: userEmail || 'kowalski.madagascar123@gmail.com',
+          targetEmail: newTeacherEmail.trim().toLowerCase(),
+          artisticName: newTeacherArtistic.trim() || newTeacherName.trim(),
+          role: 'TEACHER',
+          plan: 'UNLIMITED',
+          notes: `Professor de ${newTeacherDiscipline} cadastrado diretamente por Kowalski`,
+        }),
+      });
+
+      onShowToast(
+        '🎓 Professor Cadastrado!',
+        `${newTeacherName} (${newTeacherEmail}) já pode entrar na Área do Professor e fazer login no Gmail!`,
+        'success'
+      );
+      setNewTeacherName('');
+      setNewTeacherEmail('');
+      setNewTeacherArtistic('');
+      fetchTeacherData();
+      fetchWhitelistData();
+    } catch (err: any) {
+      onShowToast('❌ Erro', err.message, 'error');
+    } finally {
+      setIsAddingTeacher(false);
+    }
+  };
+
+  const handleTestSmtpSubmit = async () => {
+    if (!smtpTestEmail || !smtpTestEmail.includes('@')) {
+      onShowToast('❌ E-mail Inválido', 'Informe um Gmail de destino.', 'error');
+      return;
+    }
+
+    setIsTestingSmtp(true);
+    setSmtpStatusResult(null);
+    try {
+      const storedToken = (typeof window !== 'undefined' && sessionStorage.getItem('rimalab_admin_token')) || 'adm_token_36737829';
+      const res = await fetch('/api/admin/test-smtp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`,
+          'x-admin-password': '36737829',
+        },
+        body: JSON.stringify({
+          password: '36737829',
+          adminToken: storedToken,
+          email: userEmail || 'kowalski.madagascar123@gmail.com',
+          targetEmail: smtpTestEmail.trim(),
+        }),
+      });
+      const data = await res.json();
+      setSmtpStatusResult(data);
+      if (res.ok && data.success) {
+        onShowToast('✉️ E-mail Entregue!', `E-mail de teste enviado com sucesso para ${smtpTestEmail}`, 'success');
+      } else {
+        onShowToast('⚠️ Diagnóstico SMTP', data.error || 'SMTP precisa de configuração de credenciais no servidor.', 'info');
+      }
+    } catch (err: any) {
+      setSmtpStatusResult({ success: false, error: err.message });
+      onShowToast('❌ Erro', err.message, 'error');
+    } finally {
+      setIsTestingSmtp(false);
     }
   };
 
@@ -597,12 +799,12 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         body: JSON.stringify({
           password: '36737829',
           adminToken: storedToken,
-          email: userEmail || 'kowalski.madagascar123@gmail.com',
+          email: userEmail || 'admin@rimalab.com',
           targetEmail: newGmailInput.trim().toLowerCase(),
           artisticName: newGmailArtisticName.trim() || undefined,
           role: newGmailRole,
           plan: newGmailPlan,
-          notes: newGmailNotes.trim() || 'Cadastrado no painel por Kowalski',
+          notes: newGmailNotes.trim() || 'Cadastrado no painel administrativo',
         }),
       });
 
@@ -628,8 +830,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   };
 
   const handleRemoveAuthorizedGmail = async (emailToRemove: string) => {
-    if (emailToRemove === 'kowalski.madagascar123@gmail.com') {
-      onShowToast('⚠️ Ação Não Permitida', 'A conta principal do Kowalski não pode ser revogada.', 'error');
+    if (emailToRemove.toLowerCase().includes('kowalski') || emailToRemove.toLowerCase().includes('admin')) {
+      onShowToast('⚠️ Ação Não Permitida', 'A conta principal do Administrador Master não pode ser revogada.', 'error');
       return;
     }
 
@@ -645,7 +847,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         body: JSON.stringify({
           password: '36737829',
           adminToken: storedToken,
-          email: userEmail || 'kowalski.madagascar123@gmail.com',
+          email: userEmail || 'admin@rimalab.com',
           targetEmail: emailToRemove,
         }),
       });
@@ -894,6 +1096,27 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 >
                   <GraduationCap className="h-3.5 w-3.5" />
                   <span>Alunos & Evolução (55 XP/Nv)</span>
+                </button>
+
+                <button
+                  id="tab-prof-teachers"
+                  onClick={() => {
+                    setActiveTab('teachers_approval');
+                    fetchTeacherData();
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    activeTab === 'teachers_approval'
+                      ? 'bg-amber-500 text-neutral-950 shadow'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                >
+                  <Crown className="h-3.5 w-3.5" />
+                  <span>🎓 Professores & Aprovações</span>
+                  {teacherRequestsList.filter((r) => r.status === 'PENDING').length > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-400 text-neutral-950 animate-bounce">
+                      {teacherRequestsList.filter((r) => r.status === 'PENDING').length}
+                    </span>
+                  )}
                 </button>
 
                 <button
@@ -1722,6 +1945,357 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                       <span>🚀 Atribuir XP & Salvar Evolução para {targetStudentEmail}</span>
                     </button>
                   </div>
+                </div>
+
+              </div>
+            )}
+
+            {/* TAB 4: TEACHERS & APPROVALS (KOWALSKI MASTER CONTROL) */}
+            {activeTab === 'teachers_approval' && (
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 bg-neutral-950">
+                
+                {/* Header Banner */}
+                <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-950/40 via-neutral-900 to-neutral-950 p-4 sm:p-5 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                        <Crown className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-display font-black text-sm text-white">
+                            Gestão de Professores & Aprovações
+                          </h4>
+                          <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 text-[10px] font-black uppercase text-amber-300">
+                            Diretoria Kowalski MC
+                          </span>
+                        </div>
+                        <p className="text-xs text-neutral-400 mt-0.5">
+                          Aceite novos professores com 1 clique, cadastre mentores diretamente e envie links de confirmação oficiais pelo Gmail.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={fetchTeacherData}
+                      disabled={isFetchingTeachers}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800 text-xs font-bold transition-colors shrink-0"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${isFetchingTeachers ? 'animate-spin' : ''}`} />
+                      <span>Atualizar Lista</span>
+                    </button>
+                  </div>
+
+                  {/* Counters */}
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-neutral-800/80">
+                    <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">Solicitações Pendentes</span>
+                      <span className="text-lg font-black text-amber-400">
+                        {teacherRequestsList.filter((r) => r.status === 'PENDING').length}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">Professores Aprovados</span>
+                      <span className="text-lg font-black text-emerald-400">
+                        {approvedTeachersList.length || 2}
+                      </span>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800">
+                      <span className="text-[10px] uppercase font-bold text-neutral-400 block">E-mails Disparados</span>
+                      <span className="text-lg font-black text-blue-400">
+                        {dispatchedEmailsList.length}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 1: Pending Requests */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-amber-400" />
+                      <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-200">
+                        Fila de Solicitações Pendentes ({teacherRequestsList.filter((r) => r.status === 'PENDING').length})
+                      </h5>
+                    </div>
+                  </div>
+
+                  {teacherRequestsList.filter((r) => r.status === 'PENDING').length === 0 ? (
+                    <div className="text-center py-6 border border-dashed border-neutral-800 rounded-xl">
+                      <CheckCircle2 className="h-8 w-8 text-emerald-400/60 mx-auto mb-2" />
+                      <p className="text-xs font-bold text-neutral-300">Nenhuma solicitação pendente no momento.</p>
+                      <p className="text-[11px] text-neutral-500 mt-0.5">
+                        Novas candidaturas de professores aparecerão aqui para sua aprovação.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {teacherRequestsList
+                        .filter((r) => r.status === 'PENDING')
+                        .map((req) => {
+                          const directApproveUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/teachers/approve?token=${req.token}&email=${encodeURIComponent(req.email)}`;
+                          const gmailComposeUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(req.email)}&su=${encodeURIComponent('🎓 Você foi Aprovado como Professor no RimaLab Academy!')}&body=${encodeURIComponent(
+                            `Olá ${req.fullName || 'Professor'},\n\nParabéns! Sua solicitação para lecionar na Academia de Rimas do RimaLab foi APROVADA pelo Mestre Kowalski MC!\n\nSeu acesso foi liberado com privilégios de Professor. Você já pode fazer login na plataforma pelo seu Gmail (${req.email}):\n\nLink direto de confirmação: ${directApproveUrl}\n\nAbraços,\nKowalski MC & Luquita MC\nRimaLab Academy`
+                          )}`;
+
+                          return (
+                            <div
+                              key={req.id || req.email}
+                              className="p-4 rounded-xl border border-amber-500/40 bg-neutral-950 space-y-3 shadow-lg shadow-black/40"
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h6 className="font-bold text-sm text-white">
+                                      {req.fullName}
+                                    </h6>
+                                    {req.artisticName && req.artisticName !== req.fullName && (
+                                      <span className="text-xs text-amber-400 font-mono">({req.artisticName})</span>
+                                    )}
+                                    <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                      {req.discipline}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-neutral-400 font-mono mt-0.5 flex items-center gap-1.5">
+                                    <Mail className="h-3 w-3 text-neutral-500" />
+                                    <span>{req.email}</span>
+                                    {req.phoneOrWhatsapp && (
+                                      <span className="text-neutral-500">• Tel: {req.phoneOrWhatsapp}</span>
+                                    )}
+                                    {req.discordUser && (
+                                      <span className="text-neutral-500">• Discord: {req.discordUser}</span>
+                                    )}
+                                  </p>
+                                </div>
+
+                                <span className="text-[10px] text-neutral-500 font-mono shrink-0">
+                                  {new Date(req.requestedAt).toLocaleString('pt-BR')}
+                                </span>
+                              </div>
+
+                              {req.motivation && (
+                                <p className="text-xs text-neutral-300 bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800 leading-relaxed italic">
+                                  "{req.motivation}"
+                                </p>
+                              )}
+
+                              {/* Action Buttons */}
+                              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-neutral-900">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApproveTeacher(req.email)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-black text-xs transition-all shadow cursor-pointer active:scale-95"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  <span>✅ Aceitar Professor Agora</span>
+                                </button>
+
+                                <a
+                                  href={gmailComposeUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600/90 hover:bg-red-500 text-white font-bold text-xs transition-all shadow"
+                                >
+                                  <Mail className="h-3.5 w-3.5" />
+                                  <span>✉️ Abrir no Gmail para Enviar</span>
+                                </a>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRejectTeacher(req.email)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-red-400 border border-neutral-800 text-xs font-bold transition-all ml-auto"
+                                >
+                                  <UserX className="h-3.5 w-3.5" />
+                                  <span>Recusar</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 2: Direct Add Teacher Form */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <PlusCircle className="h-4 w-4 text-amber-400" />
+                    <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-200">
+                      Cadastrar Novo Professor Diretamente (Acesso Imediato)
+                    </h5>
+                  </div>
+
+                  <form onSubmit={handleDirectAddTeacherSubmit} className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-neutral-400 mb-1">
+                          Nome Completo do Professor <span className="text-amber-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={newTeacherName}
+                          onChange={(e) => setNewTeacherName(e.target.value)}
+                          placeholder="ex: Carlos Drummond, MC Luana"
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-neutral-400 mb-1">
+                          Gmail do Professor <span className="text-amber-400">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={newTeacherEmail}
+                          onChange={(e) => setNewTeacherEmail(e.target.value)}
+                          placeholder="ex: professor.rima@gmail.com"
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-neutral-400 mb-1">
+                          Matéria / Especialidade
+                        </label>
+                        <select
+                          value={newTeacherDiscipline}
+                          onChange={(e) => setNewTeacherDiscipline(e.target.value)}
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none"
+                        >
+                          <option value="Métrica & Freestyle">Métrica & Freestyle de Batalha</option>
+                          <option value="Pedagogia & Rima Ideológica">Pedagogia & Rima Ideológica</option>
+                          <option value="Speed Flow & Dicção">Speed Flow & Dicção Rápida</option>
+                          <option value="Construção de Punchlines">Construção de Punchlines</option>
+                          <option value="Métricas Avançadas & Beatmaking">Métricas Avançadas & Beatmaking</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold text-neutral-400 mb-1">
+                          Nome Artístico / Vulgo (Opcional)
+                        </label>
+                        <input
+                          type="text"
+                          value={newTeacherArtistic}
+                          onChange={(e) => setNewTeacherArtistic(e.target.value)}
+                          placeholder="ex: MC Professor"
+                          className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white placeholder:text-neutral-600 focus:border-amber-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isAddingTeacher}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 py-2.5 text-xs font-black text-neutral-950 shadow-lg shadow-amber-500/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                      {isAddingTeacher ? <RefreshCw className="h-4 w-4 animate-spin" /> : <GraduationCap className="h-4 w-4" />}
+                      <span>🎓 Cadastrar e Liberar Acesso de Professor</span>
+                    </button>
+                  </form>
+                </div>
+
+                {/* Section 3: Active Approved Teachers Roster */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-emerald-400" />
+                      <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-200">
+                        Corpo Docente & Professores Autorizados ({approvedTeachersList.length || 2})
+                      </h5>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {approvedTeachersList.map((t) => (
+                      <div
+                        key={t.id || t.email}
+                        className="p-3.5 rounded-xl border border-neutral-800 bg-neutral-950 flex items-start gap-3"
+                      >
+                        <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-neutral-950 font-black text-sm shrink-0 shadow">
+                          {t.fullName?.substring(0, 2).toUpperCase() || 'MC'}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h6 className="font-bold text-xs text-white truncate">
+                              {t.fullName}
+                            </h6>
+                            {t.isMaster && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                Mestre Fundador
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-amber-400/90 font-medium truncate mt-0.5">
+                            {t.discipline}
+                          </p>
+                          <p className="text-[10px] text-neutral-500 font-mono truncate mt-0.5">
+                            {t.email}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                            <Check className="h-2.5 w-2.5" /> Ativo
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Section 4: Gmail SMTP Dispatcher & Diagnostics */}
+                <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-blue-400" />
+                    <h5 className="font-bold text-xs uppercase tracking-wider text-neutral-200">
+                      Diagnóstico & Teste de Disparo de E-mail (Gmail SMTP)
+                    </h5>
+                  </div>
+
+                  <p className="text-xs text-neutral-400">
+                    Envie um e-mail de teste para verificar se o seu servidor está entregando mensagens de aprovação diretamente para a caixa de entrada.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <input
+                      type="email"
+                      value={smtpTestEmail}
+                      onChange={(e) => setSmtpTestEmail(e.target.value)}
+                      placeholder="kowalski.madagascar123@gmail.com"
+                      className="w-full sm:flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-amber-500 focus:outline-none font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleTestSmtpSubmit}
+                      disabled={isTestingSmtp}
+                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-colors shrink-0 disabled:opacity-50"
+                    >
+                      {isTestingSmtp ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />}
+                      <span>Testar Envio de E-mail</span>
+                    </button>
+                  </div>
+
+                  {smtpStatusResult && (
+                    <div className={`p-3 rounded-xl border text-xs font-mono space-y-1 ${
+                      smtpStatusResult.success
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                        : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                    }`}>
+                      <p className="font-bold">
+                        {smtpStatusResult.success ? '✅ E-mail enviado com sucesso!' : '⚠️ Informação sobre Envio:'}
+                      </p>
+                      <p className="text-[11px] leading-relaxed">
+                        {smtpStatusResult.message || smtpStatusResult.error || JSON.stringify(smtpStatusResult)}
+                      </p>
+                      {smtpStatusResult.help && (
+                        <p className="text-[10px] text-neutral-400 mt-1">{smtpStatusResult.help}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
               </div>

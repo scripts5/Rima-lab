@@ -452,8 +452,62 @@ export const AIVoiceProfessorModal: React.FC<AIVoiceProfessorModalProps> = ({
     if (!customText) setTextInput('');
   };
 
+  const getOfflineCoachResponse = (promptText: string, topic: string): string => {
+    const p = promptText.toLowerCase();
+    const mc = profile?.artisticName || 'MC';
+    if (p.includes('punchline') || p.includes('bater') || p.includes('sangue') || p.includes('ataque') || topic === 'punchlines') {
+      return `${mc}, na punchline o segredo é a armação em 4 tempos: barra 1 introduz o tema, barra 2 prepara a armadilha, barra 3 quebra a expectativa e a barra 4 crava o golpe na caixa! Não se precipite antes do quarto compasso.`;
+    }
+    if (p.includes('flow') || p.includes('speed') || p.includes('rápido') || p.includes('métrica') || p.includes('compasso') || topic === 'flow') {
+      return `Para polir seu flow, ${mc}, respire entre a 2ª e a 3ª barra. Em vez de apenas acelerar, brinque com o andamento: alterne entre flow arrastado e aceleração em tercinas, sempre cravando no bumbo e na caixa.`;
+    }
+    if (p.includes('bloqueio') || p.includes('travei') || p.includes('branco') || p.includes('mente')) {
+      return `Quando der branco na batalha, ${mc}, não fique em silêncio! Solte uma barra de transição simples narrando o ambiente ou seu próprio fôlego, ganhe tempo e monte a rima seguinte no compasso 4.`;
+    }
+    if (p.includes('gasta') || p.includes('humor') || p.includes('tirada')) {
+      return `Gastação pesada é sobre timing e quebra de expectativa! Use comparações cômicas e rimas ricas. A plateia compra a ideia quando você ri com ela e não apenas ataca o oponente.`;
+    }
+    if (p.includes('ideolog') || p.includes('conhecimento') || p.includes('consciência') || topic === 'mentalidade') {
+      return `No freestyle ideológico, seu conteúdo é seu escudo. Use metáforas sobre o cotidiano da quebrada, ancestralidade e superação. Rimas ricas e vocabulário amplo fazem sua mensagem ecoar forte.`;
+    }
+    return `Visão, ${mc}! O fundamental no freestyle é a constância: treine 10 minutos por dia com beats variados. Mantenha a presença de palco e a dicção limpa!`;
+  };
+
   const handleHttpFallback = async (text: string) => {
     setIsCoachSpeaking(true);
+
+    const deliverCoachReply = (replyText: string) => {
+      setConversation(prev => [
+        ...prev,
+        {
+          id: `coach_${Date.now()}`,
+          sender: 'coach',
+          text: replyText,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ]);
+
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(replyText);
+        utterance.lang = 'pt-BR';
+        utterance.rate = 1.05;
+        utterance.pitch = 0.95;
+        utterance.onend = () => setIsCoachSpeaking(false);
+        utterance.onerror = () => setIsCoachSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+      } else {
+        setIsCoachSpeaking(false);
+      }
+    };
+
+    // If offline, deliver local coach advice directly
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const offlineReply = getOfflineCoachResponse(text, selectedTopic);
+      deliverCoachReply(offlineReply);
+      return;
+    }
+
     try {
       const res = await fetch('/api/voice-coach/ask', {
         method: 'POST',
@@ -468,35 +522,14 @@ export const AIVoiceProfessorModal: React.FC<AIVoiceProfessorModalProps> = ({
 
       if (res.ok) {
         const data = await res.json();
-        const replyText = data.reply || 'Visão! Treino de alto nível. Mantenha o ritmo no 4/4 e acerte a punchline na caixa!';
-        
-        setConversation(prev => [
-          ...prev,
-          {
-            id: `coach_${Date.now()}`,
-            sender: 'coach',
-            text: replyText,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          },
-        ]);
-
-        // Speak aloud with SpeechSynthesis for immediate instant response
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(replyText);
-          utterance.lang = 'pt-BR';
-          utterance.rate = 1.1;
-          utterance.pitch = 0.95;
-          utterance.onend = () => setIsCoachSpeaking(false);
-          utterance.onerror = () => setIsCoachSpeaking(false);
-          window.speechSynthesis.speak(utterance);
-        } else {
-          setIsCoachSpeaking(false);
-        }
+        const replyText = data.reply || getOfflineCoachResponse(text, selectedTopic);
+        deliverCoachReply(replyText);
+      } else {
+        deliverCoachReply(getOfflineCoachResponse(text, selectedTopic));
       }
     } catch (e) {
-      console.warn('HTTP coach fallback error:', e);
-      setIsCoachSpeaking(false);
+      console.warn('HTTP coach fallback to offline logic:', e);
+      deliverCoachReply(getOfflineCoachResponse(text, selectedTopic));
     }
   };
 

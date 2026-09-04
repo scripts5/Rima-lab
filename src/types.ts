@@ -301,3 +301,25 @@ export interface WhitelistSettings {
   blockedAttempts: BlockedLoginAttempt[];
 }
 
+export interface OfflineLessonRecord {
+  id: string;
+  lessonId: string;
+  title: string;
+  category: string;
+  tier?: number;
+  downloadedAt: string;
+  audioBlobUrl?: string;
+  audioSizeKb?: number;
+  hasAudio: boolean;
+  lessonData: Lesson;
+}
+
+export interface OfflineAudioTake {
+  id: string;
+  recordedAt: string;
+  durationSeconds: number;
+  transcript: string;
+  audioBlobUrl?: string;
+  mimeType: string;
+}
+

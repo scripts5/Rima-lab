@@ -50,7 +50,8 @@ interface ChatMessage {
 }
 
 const AUTHORIZED_ADMIN_EMAILS = [
-  'kowalski.madagascar123@gmail.com',
+  'admin@rimalab.com',
+  'kowalski@rimalab.com',
   'ravel.macedo@escola.pr.gov.br',
 ];
 
@@ -1201,7 +1202,7 @@ export const KowalskiStudioModal: React.FC<KowalskiStudioModalProps> = ({
                         <h4 className="text-sm font-bold text-white">Serviço de Envio de E-mails (SMTP)</h4>
                       </div>
                       <p className="text-xs text-neutral-300 leading-relaxed">
-                        Este módulo gerencia o envio de notificações em tempo real para <strong className="text-amber-300">kowalski.madagascar123@gmail.com</strong> quando professores solicitam aprovação de acesso ou quando alertas de sistema são disparados.
+                        Este módulo gerencia o envio de notificações em tempo real para o e-mail do Administrador Master quando professores solicitam aprovação de acesso ou quando alertas de sistema são disparados.
                       </p>
                     </div>
 
@@ -1213,11 +1214,11 @@ export const KowalskiStudioModal: React.FC<KowalskiStudioModalProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         <div className="flex items-center justify-between p-2.5 rounded-lg bg-neutral-950 border border-neutral-800">
                           <span className="font-mono text-neutral-300">SMTP_USER</span>
-                          <span className="font-mono text-amber-400 text-[11px]">kowalski.madagascar123@gmail.com</span>
+                          <span className="font-mono text-amber-400 text-[11px]">Configurado no Servidor</span>
                         </div>
                         <div className="flex items-center justify-between p-2.5 rounded-lg bg-neutral-950 border border-neutral-800">
                           <span className="font-mono text-neutral-300">Destinatário Admin</span>
-                          <span className="font-mono text-emerald-400 text-[11px]">kowalski.madagascar123@gmail.com</span>
+                          <span className="font-mono text-emerald-400 text-[11px]">E-mail do Administrador Master</span>
                         </div>
                       </div>
                     </div>
@@ -1232,7 +1233,7 @@ export const KowalskiStudioModal: React.FC<KowalskiStudioModalProps> = ({
                           type="email"
                           value={smtpTestRecipient}
                           onChange={(e) => setSmtpTestRecipient(e.target.value)}
-                          placeholder="kowalski.madagascar123@gmail.com"
+                          placeholder="seu.email@exemplo.com"
                           className="flex-1 rounded-xl border border-neutral-700 bg-neutral-950 px-3.5 py-2.5 text-xs text-white placeholder:text-neutral-500 focus:border-amber-500 focus:outline-none"
                         />
                         <button

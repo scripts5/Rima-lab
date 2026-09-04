@@ -5,6 +5,7 @@ export type NavTabId =
   | 'onboarding' 
   | 'tracks' 
   | 'studio' 
+  | 'ofensiva'
   | 'bot' 
   | 'calls' 
   | 'lessons' 

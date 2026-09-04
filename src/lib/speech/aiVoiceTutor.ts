@@ -16,14 +16,55 @@ class AIVoiceTutorEngine {
   private audioCtx: AudioContext | null = null;
   private metronomeInterval: number | null = null;
 
+  private currentAudioElement: HTMLAudioElement | null = null;
+
   constructor() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       this.synth = window.speechSynthesis;
+      // Preload voices
+      if (this.synth.onvoiceschanged !== undefined) {
+        this.synth.onvoiceschanged = () => {
+          this.synth?.getVoices();
+        };
+      }
     }
   }
 
   public getIsSpeaking(): boolean {
-    return this.isSpeaking || (this.synth?.speaking ?? false);
+    return this.isSpeaking || (this.synth?.speaking ?? false) || (this.currentAudioElement ? !this.currentAudioElement.paused : false);
+  }
+
+  public playOfflineAudio(blob: Blob, options: { volume?: number; onEnd?: () => void; onError?: (e: any) => void } = {}): HTMLAudioElement {
+    this.stop();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.volume = options.volume ?? 1.0;
+
+    audio.onplay = () => {
+      this.isSpeaking = true;
+    };
+
+    audio.onended = () => {
+      this.isSpeaking = false;
+      this.currentAudioElement = null;
+      URL.revokeObjectURL(url);
+      options.onEnd?.();
+    };
+
+    audio.onerror = (e) => {
+      this.isSpeaking = false;
+      this.currentAudioElement = null;
+      URL.revokeObjectURL(url);
+      options.onError?.(e);
+    };
+
+    this.currentAudioElement = audio;
+    audio.play().catch((err) => {
+      console.warn('Audio play autoplay policy:', err);
+      options.onError?.(err);
+    });
+
+    return audio;
   }
 
   public speak(text: string, options: VoiceTutorOptions = {}) {
@@ -34,6 +75,11 @@ class AIVoiceTutorEngine {
     }
 
     this.stop();
+
+    // Android/Chrome resume bug workaround
+    if (this.synth.paused) {
+      this.synth.resume();
+    }
 
     // Clean markdown or bracket artifacts
     const cleanText = text
@@ -51,11 +97,16 @@ class AIVoiceTutorEngine {
     utterance.volume = options.volume ?? 1.0;
 
     // Pick best Portuguese voice if available
-    const voices = this.synth.getVoices();
+    const voices = this.synth.getVoices() || [];
     const ptVoices = voices.filter(v => v.lang.startsWith('pt') || v.lang.includes('BR') || v.lang.includes('PT'));
     
     // Prefer Google or natural PT-BR voice
-    const preferredVoice = ptVoices.find(v => v.name.toLowerCase().includes('brazil') || v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('luciana') || v.name.toLowerCase().includes('felipe')) || ptVoices[0];
+    const preferredVoice = ptVoices.find(v => 
+      v.name.toLowerCase().includes('brazil') || 
+      v.name.toLowerCase().includes('google') || 
+      v.name.toLowerCase().includes('luciana') || 
+      v.name.toLowerCase().includes('felipe')
+    ) || ptVoices[0];
     
     if (preferredVoice) {
       utterance.voice = preferredVoice;
@@ -124,6 +175,10 @@ class AIVoiceTutorEngine {
   }
 
   public stop() {
+    if (this.currentAudioElement) {
+      this.currentAudioElement.pause();
+      this.currentAudioElement = null;
+    }
     if (this.synth) {
       this.synth.cancel();
     }

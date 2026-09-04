@@ -434,13 +434,19 @@ export const DuolingoNotificationCenter: React.FC<DuolingoNotificationCenterProp
               )}
             </div>
 
-            {/* Footer Summary */}
-            <div className="p-3 border-t border-neutral-800/80 bg-neutral-900/40 flex items-center justify-between text-[11px] text-neutral-400">
-              <span className="flex items-center gap-1.5">
-                <Shield className="h-3.5 w-3.5 text-emerald-400" />
-                <span>Lembretes Inteligentes Anti-PreGUIÇA</span>
-              </span>
-              <span className="text-amber-400 font-bold">RimaLab App</span>
+            {/* Footer Summary with Link to Ofensiva & Metas */}
+            <div className="p-3 border-t border-neutral-800/80 bg-neutral-900/60 flex items-center justify-between text-[11px] text-neutral-400">
+              <button
+                onClick={() => {
+                  onNavigateToTab?.('ofensiva');
+                  setIsOpen(false);
+                }}
+                className="flex items-center gap-1.5 text-amber-400 hover:text-amber-300 font-bold transition-colors cursor-pointer"
+              >
+                <Flame className="h-3.5 w-3.5 text-orange-400 fill-orange-400" />
+                <span>Ver Ofensiva & Metas Diárias</span>
+              </button>
+              <span className="text-neutral-500 font-medium">APK / Webview</span>
             </div>
           </div>
         </div>

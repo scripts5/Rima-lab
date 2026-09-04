@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, 
   CheckCircle2, 
@@ -23,11 +23,23 @@ import {
   HelpCircle,
   TrendingUp,
   Sliders,
-  Send
+  Send,
+  Download,
+  HardDriveDownload,
+  Trash2,
+  Music,
+  CheckCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Lesson, UserProfile, SkillFocusType } from '../types';
 import { aiVoiceTutor } from '../lib/speech/aiVoiceTutor';
+import { 
+  downloadRecordedLessonFile, 
+  isLessonOfflineSync, 
+  getOfflineLessonAudioBlob, 
+  removeOfflineLesson, 
+  getOfflineLessonsListSync 
+} from '../lib/offline/offlineLessonManager';
 
 interface RhymeLabAcademyProps {
   lessons: Lesson[];
@@ -59,13 +71,41 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
   const [currentBeatPulse, setCurrentBeatPulse] = useState<number>(1);
   const [drillBpm, setDrillBpm] = useState<number>(90);
 
+  // Offline Recorded Lessons State
+  const [downloadedLessonIds, setDownloadedLessonIds] = useState<string[]>([]);
+  const [isDownloadingLesson, setIsDownloadingLesson] = useState<boolean>(false);
+  const [isPlayingOfflineWav, setIsPlayingOfflineWav] = useState<boolean>(false);
+  const [offlineAudioBlob, setOfflineAudioBlob] = useState<Blob | null>(null);
+  const offlineAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Load offline downloaded lessons
+  useEffect(() => {
+    const list = getOfflineLessonsListSync();
+    setDownloadedLessonIds(list.map(l => l.lessonId || l.id));
+  }, []);
+
   // Clean up audio on unmount
   useEffect(() => {
     return () => {
       aiVoiceTutor.stop();
       aiVoiceTutor.stopMetronome();
+      if (offlineAudioRef.current) {
+        offlineAudioRef.current.pause();
+        offlineAudioRef.current = null;
+      }
     };
   }, []);
+
+  // Load cached audio blob when selected lesson changes
+  useEffect(() => {
+    if (selectedLesson && downloadedLessonIds.includes(selectedLesson.id)) {
+      getOfflineLessonAudioBlob(selectedLesson.id).then((blob) => {
+        setOfflineAudioBlob(blob);
+      });
+    } else {
+      setOfflineAudioBlob(null);
+    }
+  }, [selectedLesson?.id, downloadedLessonIds]);
 
   // Update selected lesson when category changes or when current becomes locked
   useEffect(() => {
@@ -73,7 +113,7 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
     if (currentAvailable.length > 0 && (!selectedLesson || !currentAvailable.some(l => l.id === selectedLesson.id))) {
       setSelectedLesson(currentAvailable[0]);
     }
-  }, [activeCategory, lessons]);
+  }, [activeCategory, lessons, downloadedLessonIds]);
 
   // Update drill BPM when lesson changes
   useEffect(() => {
@@ -84,14 +124,20 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
     setCompletedSuccess(false);
     aiVoiceTutor.stop();
     aiVoiceTutor.stopMetronome();
+    if (offlineAudioRef.current) {
+      offlineAudioRef.current.pause();
+      offlineAudioRef.current = null;
+    }
     setIsSpeaking(false);
     setIsMetronomeActive(false);
+    setIsPlayingOfflineWav(false);
   }, [selectedLesson?.id]);
 
   const categories = [
     'Speed Flow',
     'Punchlines',
     'Minha Trilha',
+    'Aulas Baixadas (Offline)',
     'Fundamentos',
     'Encaixe no Beat',
     'Contagem de Versos',
@@ -102,6 +148,8 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
 
   // Helper to check if a lesson is locked based on prerequisite
   const isLessonLocked = (lesson: Lesson): boolean => {
+    // If downloaded offline, allow opening immediately for practice!
+    if (downloadedLessonIds.includes(lesson.id)) return false;
     if (!lesson.prerequisiteLessonId) return false;
     const prereq = lessons.find(l => l.id === lesson.prerequisiteLessonId);
     return !prereq?.isCompleted;
@@ -109,6 +157,9 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
 
   const getFilteredLessons = (): Lesson[] => {
     return lessons.filter(l => {
+      if (activeCategory === 'Aulas Baixadas (Offline)') {
+        return downloadedLessonIds.includes(l.id);
+      }
       if (activeCategory === 'Todos') return true;
       if (activeCategory === 'Speed Flow') return l.track === 'speedflow' || l.category === 'Speed Flow';
       if (activeCategory === 'Punchlines') return l.track === 'punchline' || l.category === 'Punchlines';
@@ -141,8 +192,91 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
     setCompletedSuccess(false);
     aiVoiceTutor.stop();
     aiVoiceTutor.stopMetronome();
+    if (offlineAudioRef.current) {
+      offlineAudioRef.current.pause();
+      offlineAudioRef.current = null;
+    }
     setIsSpeaking(false);
     setIsMetronomeActive(false);
+    setIsPlayingOfflineWav(false);
+  };
+
+  // Download recorded lesson masterclass for offline use
+  const handleDownloadRecordedLesson = async (lesson: Lesson) => {
+    if (!lesson) return;
+    setIsDownloadingLesson(true);
+    try {
+      const { audioBlob, fileName } = await downloadRecordedLessonFile(lesson);
+      setDownloadedLessonIds((prev) => Array.from(new Set([...prev, lesson.id])));
+      setOfflineAudioBlob(audioBlob);
+
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.7 },
+        colors: ['#10b981', '#f59e0b', '#3b82f6'],
+      });
+    } catch (err) {
+      console.error('Error downloading recorded lesson:', err);
+    } finally {
+      setIsDownloadingLesson(false);
+    }
+  };
+
+  // Play synthesized/cached offline audio of the lesson
+  const handleTogglePlayOfflineAudio = async (lesson: Lesson) => {
+    if (isPlayingOfflineWav && offlineAudioRef.current) {
+      offlineAudioRef.current.pause();
+      setIsPlayingOfflineWav(false);
+      return;
+    }
+
+    try {
+      let blob = offlineAudioBlob;
+      if (!blob) {
+        blob = await getOfflineLessonAudioBlob(lesson.id);
+      }
+      if (!blob) {
+        // synthesize if not loaded
+        const { audioBlob } = await downloadRecordedLessonFile(lesson);
+        blob = audioBlob;
+        setOfflineAudioBlob(blob);
+      }
+
+      if (offlineAudioRef.current) {
+        offlineAudioRef.current.pause();
+      }
+
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      audio.onended = () => {
+        setIsPlayingOfflineWav(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+      audio.onerror = () => {
+        setIsPlayingOfflineWav(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      offlineAudioRef.current = audio;
+      await audio.play();
+      setIsPlayingOfflineWav(true);
+    } catch (err) {
+      console.warn('Playback error offline audio:', err);
+      setIsPlayingOfflineWav(false);
+    }
+  };
+
+  // Delete downloaded offline lesson
+  const handleDeleteOfflineLesson = async (lessonId: string) => {
+    await removeOfflineLesson(lessonId);
+    setDownloadedLessonIds(prev => prev.filter(id => id !== lessonId));
+    setOfflineAudioBlob(null);
+    if (isPlayingOfflineWav && offlineAudioRef.current) {
+      offlineAudioRef.current.pause();
+      offlineAudioRef.current = null;
+      setIsPlayingOfflineWav(false);
+    }
   };
 
   // AI Voice Playback Handlers
@@ -506,6 +640,11 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
                         <span>{lesson.durationMinutes} min</span>
                         <span>•</span>
                         <span>{lesson.difficulty}</span>
+                        {downloadedLessonIds.includes(lesson.id) && (
+                          <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1 ml-auto bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                            <HardDriveDownload className="h-3 w-3" /> Baixada
+                          </span>
+                        )}
                         {isLocked && (
                           <span className="text-[10px] text-amber-500/80 font-semibold flex items-center gap-1 ml-auto">
                             <Lock className="h-3 w-3" /> Bloqueado
@@ -561,6 +700,123 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
                 <p className="text-sm text-neutral-300 mt-1.5">
                   {selectedLesson.description}
                 </p>
+              </div>
+
+              {/* Recorded Lesson Offline Download & Master Audio Bar */}
+              <div className={`rounded-xl border p-4 shadow-lg transition-all ${
+                downloadedLessonIds.includes(selectedLesson.id)
+                  ? 'border-emerald-500/40 bg-gradient-to-r from-neutral-950 via-emerald-950/25 to-neutral-950'
+                  : 'border-blue-500/30 bg-gradient-to-r from-neutral-950 via-blue-950/15 to-neutral-950'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+                      downloadedLessonIds.includes(selectedLesson.id)
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                    }`}>
+                      {isPlayingOfflineWav ? (
+                        <Music className="h-5 w-5 animate-pulse text-emerald-400" />
+                      ) : downloadedLessonIds.includes(selectedLesson.id) ? (
+                        <CheckCheck className="h-5 w-5 text-emerald-400" />
+                      ) : (
+                        <HardDriveDownload className="h-5 w-5 text-blue-400" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-white">
+                          {downloadedLessonIds.includes(selectedLesson.id)
+                            ? 'Aula Gravada no Dispositivo'
+                            : 'Download da Aula Gravada'}
+                        </span>
+                        {downloadedLessonIds.includes(selectedLesson.id) && (
+                          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                            100% Offline
+                          </span>
+                        )}
+                        {isPlayingOfflineWav && (
+                          <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/30 px-2 py-0.5 rounded-full animate-pulse">
+                            Tocando Áudio...
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-neutral-400 mt-0.5">
+                        {downloadedLessonIds.includes(selectedLesson.id)
+                          ? 'Áudio gravado com metrônomo e aula completa pronto para tocar sem internet.'
+                          : 'Baixe o áudio da aula em WAV de alta qualidade para praticar offline.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Play/Pause Offline Audio button */}
+                    <button
+                      id="btn-play-offline-lesson-wav"
+                      onClick={() => handleTogglePlayOfflineAudio(selectedLesson)}
+                      className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-black transition-all ${
+                        isPlayingOfflineWav
+                          ? 'bg-red-500 text-white shadow-lg shadow-red-500/20'
+                          : downloadedLessonIds.includes(selectedLesson.id)
+                          ? 'bg-emerald-500 text-neutral-950 hover:bg-emerald-400 shadow-md shadow-emerald-500/20'
+                          : 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700'
+                      }`}
+                    >
+                      {isPlayingOfflineWav ? (
+                        <>
+                          <Square className="h-3.5 w-3.5 fill-current" />
+                          <span>Pausar Áudio Offline</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                          <span>Tocar Áudio Gravado</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Download button */}
+                    <button
+                      id="btn-download-recorded-lesson"
+                      disabled={isDownloadingLesson}
+                      onClick={() => handleDownloadRecordedLesson(selectedLesson)}
+                      className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs font-bold transition-all ${
+                        downloadedLessonIds.includes(selectedLesson.id)
+                          ? 'bg-neutral-800/80 text-neutral-300 border border-neutral-700 hover:bg-neutral-700'
+                          : 'bg-blue-600 text-white hover:bg-blue-500 shadow-md shadow-blue-600/20'
+                      }`}
+                      title="Baixar arquivo de áudio WAV gravado e dados completos para estudo offline"
+                    >
+                      {isDownloadingLesson ? (
+                        <>
+                          <HardDriveDownload className="h-3.5 w-3.5 animate-bounce" />
+                          <span>Gerando Áudio WAV...</span>
+                        </>
+                      ) : downloadedLessonIds.includes(selectedLesson.id) ? (
+                        <>
+                          <Download className="h-3.5 w-3.5" />
+                          <span>Baixar Novamente (.wav)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-3.5 w-3.5" />
+                          <span>Baixar Aula Gravada</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Delete offline download */}
+                    {downloadedLessonIds.includes(selectedLesson.id) && (
+                      <button
+                        onClick={() => handleDeleteOfflineLesson(selectedLesson.id)}
+                        className="p-2 rounded-xl bg-neutral-800 text-neutral-400 hover:text-red-400 hover:bg-neutral-700 transition-colors"
+                        title="Remover aula offline do armazenamento local"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* AI Voice Coach Interactive Bar */}

@@ -11,6 +11,14 @@
     font-family: var(--font-sans);
     background-color: #0a0a0c;
     color: #f4f4f5;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: contain;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  button, a, input, select, textarea {
+    touch-action: manipulation;
   }
 
   h1, h2, h3, .font-display {

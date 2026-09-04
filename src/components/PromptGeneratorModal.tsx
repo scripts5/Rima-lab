@@ -7,8 +7,10 @@ import {
   Layers, 
   Zap, 
   Compass, 
-  Check 
+  Check,
+  WifiOff
 } from 'lucide-react';
+import { FREESTYLE_WORDS } from '../data/freestyleTopics';
 
 interface PromptGeneratorModalProps {
   isOpen: boolean;
@@ -21,6 +23,67 @@ interface PromptGeneratorModalProps {
   }) => void;
 }
 
+const OFFLINE_THEMES_BANK: Record<string, { topic: string; punchlineTip: string; words: string[] }[]> = {
+  'Batalha de Rima': [
+    {
+      topic: 'Contragolpe em 4 Compassos contra MC Arrogante',
+      punchlineTip: 'Use os dois primeiros versos para absorver o ataque e o 4º para desarmar o adversário.',
+      words: ['nocaute', 'resposta', 'postura', 'combate']
+    },
+    {
+      topic: 'Desconstrução de Flow Repetitivo no Cypher',
+      punchlineTip: 'Aponte que o adversário decora versos em vez de improvisar no momento presente.',
+      words: ['papagaio', 'dublê', 'ensaio', 'improviso']
+    },
+    {
+      topic: 'Batalha de Sangue: Resposta Rápida com Metáfora de Ringue',
+      punchlineTip: 'Bata com a rima mais pesada na caixa do quarto compasso sem perder a compostura.',
+      words: ['contragolpe', 'pressão', 'troféu', 'campeão']
+    }
+  ],
+  'Ideológico & Poesia': [
+    {
+      topic: 'A Voz da Quebrada e a Resistência Cultural',
+      punchlineTip: 'Conecte a realidade da periferia com a força transformadora da rima consciente.',
+      words: ['consciência', 'asfalto', 'resistência', 'liberdade']
+    },
+    {
+      topic: 'O Hip Hop como Ferramenta de Educação e Resgate',
+      punchlineTip: 'Mostre que o microfone é uma arma pacífica de conhecimento e superação.',
+      words: ['alquimia', 'sabedoria', 'destino', 'evolução']
+    },
+    {
+      topic: 'O Labirinto da Mente Urbana',
+      punchlineTip: 'Descreva a busca por clareza em meio ao caos da metrópole.',
+      words: ['labirinto', 'instinto', 'reflexão', 'superação']
+    }
+  ],
+  'Speed Flow & Métrica': [
+    {
+      topic: 'Aceleração em Tercinas e Dicção Cirúrgica',
+      punchlineTip: 'Dobre a velocidade na 2ª e 3ª barras e crava a última palavra no tempo 4 exato.',
+      words: ['cronômetro', 'respiração', 'velocidade', 'precisão']
+    },
+    {
+      topic: 'Detroit Style: Flow no Contratempo e Caixa Atrasada',
+      punchlineTip: 'Finja que vai perder o tempo e encaixe a rima um milissegundo depois da caixa.',
+      words: ['compasso', 'sincopado', 'pesado', 'descompasso']
+    }
+  ],
+  'Gastação & Humor': [
+    {
+      topic: 'Ironia e Tirada Cômica sobre a Roupa ou Estilo do Oponente',
+      punchlineTip: 'Faça a plateia rir sem precisar apelar para ofensas gratuitas, usando timing cômico.',
+      words: ['figurante', 'passado', 'piada', 'disfarce']
+    },
+    {
+      topic: 'O MC que Prometeu Demais e Não Entregou Nada',
+      punchlineTip: 'Mostre o contraste entre a pose nas redes sociais e a falta de rima no palco.',
+      words: ['ilusão', 'promessa', 'fantasia', 'teatro']
+    }
+  ]
+};
+
 export const PromptGeneratorModal: React.FC<PromptGeneratorModalProps> = ({
   isOpen,
   onClose,
@@ -29,6 +92,7 @@ export const PromptGeneratorModal: React.FC<PromptGeneratorModalProps> = ({
   const [themeCategory, setThemeCategory] = useState<string>('Batalha de Rima');
   const [difficulty, setDifficulty] = useState<string>('Médio');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
   const [generatedResult, setGeneratedResult] = useState<{
     topic: string;
     punchlineTip: string;
@@ -41,30 +105,63 @@ export const PromptGeneratorModal: React.FC<PromptGeneratorModalProps> = ({
 
   if (!isOpen) return null;
 
+  const getLocalOfflinePrompt = () => {
+    const list = OFFLINE_THEMES_BANK[themeCategory] || OFFLINE_THEMES_BANK['Batalha de Rima'];
+    const randomItem = list[Math.floor(Math.random() * list.length)];
+    
+    // Add extra random words from FREESTYLE_WORDS
+    const extraWords = FREESTYLE_WORDS
+      .slice()
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 2)
+      .map(w => w.word.toLowerCase());
+
+    const mergedWords = Array.from(new Set([...randomItem.words, ...extraWords])).slice(0, 4);
+
+    return {
+      topic: randomItem.topic,
+      punchlineTip: randomItem.punchlineTip,
+      words: mergedWords,
+    };
+  };
+
   const handleGenerate = async () => {
     setIsGenerating(true);
+
+    // If offline, use instant local generator
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOfflineMode(true);
+      setTimeout(() => {
+        setGeneratedResult(getLocalOfflinePrompt());
+        setIsGenerating(false);
+      }, 200);
+      return;
+    }
+
     try {
       const res = await fetch('/api/generate-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ theme: themeCategory, difficulty }),
       });
-      const data = await res.json();
-      if (data.prompt) {
-        setGeneratedResult({
-          topic: data.prompt.topic,
-          punchlineTip: data.prompt.punchlineTip || 'Conecte as rimas mantendo o flow no tempo 4.',
-          words: data.prompt.words || ['mente', 'frente', 'presente', 'quente'],
-        });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.prompt) {
+          setIsOfflineMode(false);
+          setGeneratedResult({
+            topic: data.prompt.topic,
+            punchlineTip: data.prompt.punchlineTip || 'Conecte as rimas mantendo o flow no tempo 4.',
+            words: data.prompt.words || ['mente', 'frente', 'presente', 'quente'],
+          });
+          return;
+        }
       }
-    } catch (err) {
-      console.error('Error generating prompt:', err);
       // Fallback
-      setGeneratedResult({
-        topic: `${themeCategory}: Improviso Espontâneo`,
-        punchlineTip: 'Construa uma rima alternada ABAB antes de soltar a punchline final.',
-        words: ['resiliência', 'consciência', 'potência', 'experiência'],
-      });
+      setIsOfflineMode(true);
+      setGeneratedResult(getLocalOfflinePrompt());
+    } catch (err) {
+      setIsOfflineMode(true);
+      setGeneratedResult(getLocalOfflinePrompt());
     } finally {
       setIsGenerating(false);
     }
@@ -163,14 +260,20 @@ export const PromptGeneratorModal: React.FC<PromptGeneratorModalProps> = ({
         {/* Generated Result Box */}
         {generatedResult && (
           <div className="rounded-2xl border border-purple-500/40 bg-purple-950/20 p-4 space-y-3">
-            <div>
+            <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
                 Tema Sorteado:
               </span>
-              <p className="text-sm font-black text-white mt-0.5">
-                {generatedResult.topic}
-              </p>
+              {isOfflineMode && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 text-[10px] text-amber-400 font-bold">
+                  <WifiOff className="h-2.5 w-2.5" />
+                  Gerado Offline
+                </span>
+              )}
             </div>
+            <p className="text-sm font-black text-white mt-0.5">
+              {generatedResult.topic}
+            </p>
 
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">

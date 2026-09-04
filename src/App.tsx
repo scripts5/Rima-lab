@@ -64,8 +64,11 @@ import {
   OfflineIndicator 
 } from './components/OfflineIndicator';
 import { 
-  PhoneNotificationPermissionModal 
-} from './components/PhoneNotificationPermissionModal';
+  AppPermissionsModal 
+} from './components/AppPermissionsModal';
+import {
+  DailyStreakView
+} from './components/DailyStreakView';
 import { 
   UserProfile, 
   Subscription, 
@@ -99,7 +102,7 @@ import {
 } from './lib/firestoreService';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'calls' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'suggestions' | 'tracks'>('onboarding');
+  const [activeTab, setActiveTab] = useState<'onboarding' | 'studio' | 'bot' | 'calls' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'suggestions' | 'tracks' | 'ofensiva'>('onboarding');
   const [initialSkillTab, setInitialSkillTab] = useState<string | undefined>(undefined);
   const [selectedCategory, setSelectedCategory] = useState<string>('Punchlines');
   
@@ -130,10 +133,28 @@ export function App() {
     };
   });
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [lessons, setLessons] = useState<Lesson[]>(LESSONS_DATA);
+  const [lessons, setLessons] = useState<Lesson[]>(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('rimalab_completed_lessons') : null;
+      if (saved) {
+        const completedIds = new Set(JSON.parse(saved));
+        return LESSONS_DATA.map(l => ({
+          ...l,
+          isCompleted: completedIds.has(l.id) || l.isCompleted,
+        }));
+      }
+    } catch {}
+    return LESSONS_DATA;
+  });
   const [challenges, setChallenges] = useState<Challenge[]>(CHALLENGES_DATA);
   const [achievements, setAchievements] = useState<Achievement[]>(ACHIEVEMENTS_DATA);
-  const [practiceSessions, setPracticeSessions] = useState<PracticeSession[]>([]);
+  const [practiceSessions, setPracticeSessions] = useState<PracticeSession[]>(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('rimalab_practice_sessions') : null;
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
   const [xpTransactions, setXpTransactions] = useState<XPTransaction[]>([]);
   const [liveCall, setLiveCall] = useState<LiveCallSession | null>(() => {
     try {
@@ -173,6 +194,7 @@ export function App() {
   const [isKowalskiStudioOpen, setIsKowalskiStudioOpen] = useState<boolean>(false);
   const [isGmailAuthOpen, setIsGmailAuthOpen] = useState<boolean>(false);
   const [isVoiceCoachOpen, setIsVoiceCoachOpen] = useState<boolean>(false);
+  const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState<boolean>(false);
   const [isLiveBannerDismissed, setIsLiveBannerDismissed] = useState<boolean>(false);
 
   // Auto show banner again if URL or active status changes
@@ -228,6 +250,7 @@ export function App() {
 
   // Fetch Live Call Broadcast (HTTP Fallback)
   const fetchLiveCall = async (showNotificationOnNew = false) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     try {
       const res = await fetch('/api/live-call', { cache: 'no-store' });
       if (res.ok) {
@@ -251,7 +274,7 @@ export function App() {
         }
       }
     } catch (e) {
-      console.warn('Live call fetch fallback:', e);
+      // Offline fallback silent
     }
   };
 
@@ -260,6 +283,7 @@ export function App() {
     let eventSource: EventSource | null = null;
 
     const setupSSE = () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
       try {
         eventSource = new EventSource('/api/live-call/stream');
         
@@ -378,6 +402,45 @@ export function App() {
     fetchUserData();
     fetchLiveCall(false);
 
+    // 1. Android WebView Web Audio Auto-Unlock on first touch
+    const unlockAudio = () => {
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          if (ctx.state === 'suspended') {
+            ctx.resume();
+          }
+        }
+      } catch {}
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('pointerdown', unlockAudio);
+    };
+    window.addEventListener('touchstart', unlockAudio, { passive: true });
+    window.addEventListener('pointerdown', unlockAudio, { passive: true });
+
+    // 2. Android Hardware Back Button / Navigation handling for APK
+    const handlePopState = () => {
+      if (isSubscriptionOpen) {
+        setIsSubscriptionOpen(false);
+      } else if (isTeacherPortalOpen) {
+        setIsTeacherPortalOpen(false);
+      } else if (isAdminOpen) {
+        setIsAdminOpen(false);
+      } else if (isPromptGenOpen) {
+        setIsPromptGenOpen(false);
+      } else if (isVoiceCoachOpen) {
+        setIsVoiceCoachOpen(false);
+      } else if (isKowalskiStudioOpen) {
+        setIsKowalskiStudioOpen(false);
+      } else if (isGmailAuthOpen) {
+        setIsGmailAuthOpen(false);
+      } else if (activeTab !== 'onboarding') {
+        setActiveTab('onboarding');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+
     // Subscribe to Firestore Live Call updates
     const unsubscribeLiveCall = subscribeLiveCallFromFirestore((firestoreCall) => {
       if (firestoreCall?.url) {
@@ -387,6 +450,9 @@ export function App() {
 
     return () => {
       unsubscribeLiveCall();
+      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('popstate', handlePopState);
     };
   }, []);
 
@@ -400,22 +466,58 @@ export function App() {
     analysis: RhymeAnalysis;
     xpEarned: number;
   }) => {
-    try {
-      // Persist to Firestore
-      const sessionDoc: PracticeSession = {
-        id: `sess_${Date.now()}`,
-        userId: profile?.userId || 'current_user',
-        beatId: sessionData.beatId,
-        beatStyle: sessionData.beatStyle,
-        bpm: sessionData.bpm,
-        durationSeconds: sessionData.durationSeconds,
-        transcript: sessionData.transcript,
-        analysis: sessionData.analysis,
-        xpEarned: sessionData.xpEarned,
-        createdAt: new Date().toISOString(),
-      };
-      savePracticeSessionToFirestore(sessionDoc).catch(e => console.warn('Firestore session save error:', e));
+    // 1. Construct session document
+    const sessionDoc: PracticeSession = {
+      id: `sess_${Date.now()}`,
+      userId: profile?.userId || 'current_user',
+      beatId: sessionData.beatId,
+      beatStyle: sessionData.beatStyle,
+      bpm: sessionData.bpm,
+      durationSeconds: sessionData.durationSeconds,
+      transcript: sessionData.transcript,
+      analysis: sessionData.analysis,
+      xpEarned: sessionData.xpEarned,
+      createdAt: new Date().toISOString(),
+    };
 
+    // Helper: apply and persist local changes immediately
+    const applyLocalChanges = () => {
+      setPracticeSessions(prev => {
+        const next = [sessionDoc, ...prev];
+        try {
+          localStorage.setItem('rimalab_practice_sessions', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      if (profile) {
+        const newXP = profile.totalXP + sessionData.xpEarned;
+        const updatedProf = {
+          ...profile,
+          totalXP: newXP,
+          totalSessions: profile.totalSessions + 1,
+          totalMinutesPracticed: profile.totalMinutesPracticed + Math.round(sessionData.durationSeconds / 60),
+          bestScore: Math.max(profile.bestScore, sessionData.analysis.overallScore),
+        };
+        setProfile(updatedProf);
+        try {
+          localStorage.setItem('rimalab_user_profile', JSON.stringify(updatedProf));
+        } catch {}
+        saveUserProfileToFirestore(updatedProf).catch(e => console.warn('Firestore profile sync error:', e));
+      }
+      showToast('⚡ Freestyle Registrado!', `Você ganhou +${sessionData.xpEarned} XP!`, 'xp');
+    };
+
+    // Firestore async sync (persists in offline IndexedDB cache if supported)
+    savePracticeSessionToFirestore(sessionDoc).catch(e => console.warn('Firestore session save error:', e));
+
+    // If device is offline, apply locally right away
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      applyLocalChanges();
+      return;
+    }
+
+    try {
       const res = await fetch('/api/practice/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -426,10 +528,19 @@ export function App() {
         const data = await res.json();
         if (data.profile) {
           setProfile(data.profile);
+          try {
+            localStorage.setItem('rimalab_user_profile', JSON.stringify(data.profile));
+          } catch {}
           saveUserProfileToFirestore(data.profile).catch(e => console.warn('Firestore profile sync error:', e));
         }
         if (data.session) {
-          setPracticeSessions(prev => [data.session, ...prev]);
+          setPracticeSessions(prev => {
+            const next = [data.session, ...prev];
+            try {
+              localStorage.setItem('rimalab_practice_sessions', JSON.stringify(next));
+            } catch {}
+            return next;
+          });
         }
         if (data.newAchievements && data.newAchievements.length > 0) {
           showToast(
@@ -445,23 +556,10 @@ export function App() {
           );
         }
       } else {
-        // Optimistic update
-        if (profile) {
-          const newXP = profile.totalXP + sessionData.xpEarned;
-          const updatedProf = {
-            ...profile,
-            totalXP: newXP,
-            totalSessions: profile.totalSessions + 1,
-            totalMinutesPracticed: profile.totalMinutesPracticed + Math.round(sessionData.durationSeconds / 60),
-            bestScore: Math.max(profile.bestScore, sessionData.analysis.overallScore),
-          };
-          setProfile(updatedProf);
-          saveUserProfileToFirestore(updatedProf).catch(e => console.warn('Firestore profile sync error:', e));
-        }
-        showToast('⚡ Freestyle Registrado!', `Você ganhou +${sessionData.xpEarned} XP!`, 'xp');
+        applyLocalChanges();
       }
     } catch (e) {
-      console.warn('Practice session save fallback:', e);
+      applyLocalChanges();
     }
   };
 
@@ -470,10 +568,36 @@ export function App() {
     const lesson = lessons.find(l => l.id === lessonId);
     const xpReward = lesson?.xpReward || 200;
 
+    const applyLocalLessonCompletion = () => {
+      setLessons(prev => {
+        const next = prev.map(l => l.id === lessonId ? { ...l, isCompleted: true } : l);
+        try {
+          const completedIds = next.filter(l => l.isCompleted).map(l => l.id);
+          localStorage.setItem('rimalab_completed_lessons', JSON.stringify(completedIds));
+        } catch {}
+        return next;
+      });
+
+      if (profile) {
+        const updatedProf = { ...profile, totalXP: profile.totalXP + xpReward };
+        setProfile(updatedProf);
+        try {
+          localStorage.setItem('rimalab_user_profile', JSON.stringify(updatedProf));
+        } catch {}
+        saveUserProfileToFirestore(updatedProf).catch(e => console.warn('Firestore profile sync error:', e));
+      }
+      showToast('📖 Lição Concluída!', `+${xpReward} XP creditados.`, 'xp');
+    };
+
     // Persist lesson completion directly to Firestore
     saveLessonCompletionToFirestore(lessonId, customLyrics, xpReward, lesson).catch(e => {
       console.warn('Firestore lesson completion sync error:', e);
     });
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      applyLocalLessonCompletion();
+      return true;
+    }
 
     try {
       const res = await fetch(`/api/lessons/${lessonId}/complete`, {
@@ -486,9 +610,19 @@ export function App() {
         const data = await res.json();
         if (data.profile) {
           setProfile(data.profile);
+          try {
+            localStorage.setItem('rimalab_user_profile', JSON.stringify(data.profile));
+          } catch {}
           saveUserProfileToFirestore(data.profile).catch(e => console.warn('Firestore profile sync error:', e));
         }
-        setLessons(prev => prev.map(l => l.id === lessonId ? { ...l, isCompleted: true } : l));
+        setLessons(prev => {
+          const next = prev.map(l => l.id === lessonId ? { ...l, isCompleted: true } : l);
+          try {
+            const completedIds = next.filter(l => l.isCompleted).map(l => l.id);
+            localStorage.setItem('rimalab_completed_lessons', JSON.stringify(completedIds));
+          } catch {}
+          return next;
+        });
         showToast('📖 Lição Concluída!', `Parabéns! +${data.xpEarned || xpReward} XP creditados.`, 'xp');
         return true;
       }
@@ -496,13 +630,7 @@ export function App() {
       console.warn('Lesson complete fallback:', e);
     }
 
-    setLessons(prev => prev.map(l => l.id === lessonId ? { ...l, isCompleted: true } : l));
-    if (profile) {
-      const updatedProf = { ...profile, totalXP: profile.totalXP + xpReward };
-      setProfile(updatedProf);
-      saveUserProfileToFirestore(updatedProf).catch(e => console.warn('Firestore profile sync error:', e));
-    }
-    showToast('📖 Lição Concluída!', `+${xpReward} XP creditados.`, 'xp');
+    applyLocalLessonCompletion();
     return true;
   };
 
@@ -697,8 +825,13 @@ export function App() {
           {/* PWA Offline Connectivity Indicator */}
           <OfflineIndicator />
 
-          {/* Phone / APK System Notification Permission Prompt */}
-          <PhoneNotificationPermissionModal currentStreak={profile.streak} />
+          {/* Android APK / Native System App Permission Prompt */}
+          <AppPermissionsModal
+            isOpen={isPermissionsModalOpen ? true : undefined}
+            onClose={() => setIsPermissionsModalOpen(false)}
+            onShowToast={showToast}
+            currentStreak={profile?.streakDays || 1}
+          />
 
           {/* PWA Floating Install Banner for Mobile & Desktop */}
           <PWAInstallPrompt variant="banner" />
@@ -729,6 +862,7 @@ export function App() {
             onOpenStudioConfig={() => setIsKowalskiStudioOpen(true)}
             onOpenGmailAuth={() => setIsGmailAuthOpen(true)}
             onOpenVoiceCoach={() => setIsVoiceCoachOpen(true)}
+            onOpenPermissions={() => setIsPermissionsModalOpen(true)}
             onSelectCategory={handleSelectCategory}
             selectedCategory={selectedCategory}
             isPlayingBeat={isPlayingBeat}
@@ -963,6 +1097,27 @@ export function App() {
         {activeTab === 'leaderboard' && (
           <LeaderboardView
             currentProfile={profile}
+          />
+        )}
+
+        {activeTab === 'ofensiva' && (
+          <DailyStreakView
+            profile={profile}
+            onNavigateToTab={(tabId) => setActiveTab(tabId as any)}
+            onShowToast={showToast}
+            onOpenPermissions={() => setIsPermissionsModalOpen(true)}
+            onAddXP={(amount, reason) => {
+              setProfile((prev) => {
+                if (!prev) return prev;
+                const newXP = prev.totalXP + amount;
+                const newLevel = Math.floor(newXP / 1000) + 1;
+                return {
+                  ...prev,
+                  totalXP: newXP,
+                  level: newLevel,
+                };
+              });
+            }}
           />
         )}
 

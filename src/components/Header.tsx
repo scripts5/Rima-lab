@@ -46,8 +46,8 @@ import { DuolingoNotificationCenter } from './DuolingoNotificationCenter';
 import { PWAInstallPrompt } from './PWAInstallPrompt';
 
 interface HeaderProps {
-  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions' | 'tracks';
-  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions' | 'tracks') => void;
+  activeTab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions' | 'tracks' | 'ofensiva';
+  setActiveTab: (tab: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions' | 'tracks' | 'ofensiva') => void;
   profile: UserProfile | null;
   subscription: Subscription | null;
   liveCall: LiveCallSession | null;
@@ -57,6 +57,7 @@ interface HeaderProps {
   onOpenStudioConfig?: () => void;
   onOpenGmailAuth: () => void;
   onOpenVoiceCoach?: () => void;
+  onOpenPermissions?: () => void;
   onSelectCategory?: (category: string) => void;
   selectedCategory?: string;
   isPlayingBeat: boolean;
@@ -76,6 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenStudioConfig,
   onOpenGmailAuth,
   onOpenVoiceCoach,
+  onOpenPermissions,
   onSelectCategory,
   selectedCategory: propsSelectedCategory,
   isPlayingBeat,
@@ -112,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   interface MainNavTabItem {
-    id: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions' | 'tracks';
+    id: 'studio' | 'lessons' | 'challenges' | 'achievements' | 'profile' | 'leaderboard' | 'bot' | 'onboarding' | 'calls' | 'suggestions' | 'tracks' | 'ofensiva';
     label: string;
     icon: React.ComponentType<{ className?: string }>;
     badge?: string;
@@ -122,6 +124,7 @@ export const Header: React.FC<HeaderProps> = ({
   // Main classic navigation tabs
   const mainNavTabs: MainNavTabItem[] = [
     { id: 'onboarding', label: 'Início', icon: Home },
+    { id: 'ofensiva', label: 'Ofensiva & Metas', icon: Flame, badge: `${streak}d` },
     { id: 'tracks', label: 'Minhas Trilhas', icon: Target, badge: 'Cargos' },
     { id: 'studio', label: 'Studio', icon: Mic },
     { id: 'bot', label: 'Bot Beats', icon: Headphones },
@@ -213,13 +216,14 @@ export const Header: React.FC<HeaderProps> = ({
           <PWAInstallPrompt variant="navbar" />
 
           {/* Streak Badge */}
-          <div 
-            className="flex items-center gap-1 rounded-lg bg-orange-500/10 border border-orange-500/30 px-1.5 sm:px-2 py-1 text-xs font-bold text-orange-400 shrink-0"
-            title="Sequência de dias praticando rima"
+          <button 
+            onClick={() => setActiveTab('ofensiva')}
+            className="flex items-center gap-1 rounded-lg bg-orange-500/10 border border-orange-500/30 px-1.5 sm:px-2 py-1 text-xs font-bold text-orange-400 hover:bg-orange-500/20 active:scale-95 transition-all shrink-0 cursor-pointer"
+            title="Sua Ofensiva de Rimas - Clique para ver Metas Diárias"
           >
-            <Flame className="h-3.5 w-3.5 fill-orange-500 text-orange-500 shrink-0" />
+            <Flame className="h-3.5 w-3.5 fill-orange-500 text-orange-500 shrink-0 animate-pulse" />
             <span>{streak}d</span>
-          </div>
+          </button>
 
           {/* Level Progress (Desktop only) */}
           <div 
