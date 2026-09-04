@@ -17,6 +17,7 @@
         "nodemailer": "^9.0.6",
         "react": "^19.0.1",
         "react-dom": "^19.0.1",
+        "react-onesignal": "3.4.0",
         "vite": "^6.2.3",
         "ws": "^8.21.3",
       },
@@ -1075,6 +1076,8 @@
     "react": ["react@19.2.8", "", {}, "sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw=="],
 
     "react-dom": ["react-dom@19.2.8", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.8" } }, "sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ=="],
+
+    "react-onesignal": ["react-onesignal@3.4.0", "", {}, "sha512-iUAUZVw4lCtQbT4FPxpTDYPrfdYJPDFZERnYSd2ho6aNf/76vBG1v6HLMhTCjtNkQ2ufAW9L97N/pZuNvjEEUw=="],
 
     "react-refresh": ["react-refresh@0.18.0", "", {}, "sha512-QgT5//D3jfjJb6Gsjxv0Slpj23ip+HtOpnNgnb2S5zU3CB26G/IDPGoy4RJB42wzFE46DRsstbW6tKHoKbhAxw=="],
 

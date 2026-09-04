@@ -4114,7 +4114,9 @@ Seu papel:
     }
   });
 
-  // --- Vite Middleware / Static Serving ---
+  // --- Static Files & Vite Middleware ---
+  app.use(express.static(path.join(process.cwd(), 'public')));
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },

@@ -39,7 +39,7 @@ import {
   Settings,
   X
 } from 'lucide-react';
-import { UserProfile, Subscription, LiveCallSession } from '../types';
+import { UserProfile, Subscription, LiveCallSession, Lesson } from '../types';
 import { useNavigation, NavTabId, DiscordCategory, DiscordChannel } from '../context/NavigationContext';
 import { useSiteCustomization } from '../context/SiteCustomizationContext';
 import { DuolingoNotificationCenter } from './DuolingoNotificationCenter';
@@ -51,6 +51,7 @@ interface HeaderProps {
   profile: UserProfile | null;
   subscription: Subscription | null;
   liveCall: LiveCallSession | null;
+  lessons?: Lesson[];
   onOpenSubscription: () => void;
   onOpenPromptGen: () => void;
   onOpenAdmin: () => void;
@@ -71,6 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
   profile,
   subscription,
   liveCall,
+  lessons,
   onOpenSubscription,
   onOpenPromptGen,
   onOpenAdmin,
@@ -209,6 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Duolingo Notification Center Bell */}
           <DuolingoNotificationCenter
             currentStreak={streak}
+            lessons={lessons}
             onNavigateToTab={(tabId) => setActiveTab(tabId as any)}
           />
 

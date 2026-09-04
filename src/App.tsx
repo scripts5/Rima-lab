@@ -66,6 +66,9 @@ import {
 import { 
   AppPermissionsModal 
 } from './components/AppPermissionsModal';
+import { OneSignalVerificationModal } from './components/OneSignalVerificationModal';
+import { oneSignalManager } from './lib/oneSignalService';
+import { markLessonCompletedToday } from './utils/duolingoNotifications';
 import {
   DailyStreakView
 } from './components/DailyStreakView';
@@ -203,6 +206,27 @@ export function App() {
       setIsLiveBannerDismissed(false);
     }
   }, [liveCall?.url, liveCall?.isActive]);
+
+  // Initialize OneSignal Web SDK
+  useEffect(() => {
+    oneSignalManager.initialize().catch((err) => {
+      console.warn('[OneSignal] Initialization error:', err);
+    });
+  }, []);
+
+  // Synchronize authenticated user identity and tags to OneSignal
+  useEffect(() => {
+    if (profile?.userId) {
+      oneSignalManager.login(profile.userId).then(() => {
+        if (profile.artisticName) {
+          oneSignalManager.setTag('artisticName', profile.artisticName);
+        }
+        if (profile.level) {
+          oneSignalManager.setTag('level', String(profile.level));
+        }
+      }).catch(console.warn);
+    }
+  }, [profile?.userId, profile?.artisticName, profile?.level]);
 
   // Toast Notification State
   const [toastMessage, setToastMessage] = useState<{ title: string; desc: string; type: 'xp' | 'ach' | 'info' } | null>(null);
@@ -578,6 +602,10 @@ export function App() {
         return next;
       });
 
+      // Mark today's lesson done in Duolingo notification system & OneSignal
+      markLessonCompletedToday(lesson?.title || 'Lição de Rima');
+      oneSignalManager.setTag('last_lesson_completed', new Date().toISOString().split('T')[0]);
+
       if (profile) {
         const updatedProf = { ...profile, totalXP: profile.totalXP + xpReward };
         setProfile(updatedProf);
@@ -593,6 +621,10 @@ export function App() {
     saveLessonCompletionToFirestore(lessonId, customLyrics, xpReward, lesson).catch(e => {
       console.warn('Firestore lesson completion sync error:', e);
     });
+
+    // Mark today's lesson done in Duolingo notification system & OneSignal
+    markLessonCompletedToday(lesson?.title || 'Lição de Rima');
+    oneSignalManager.setTag('last_lesson_completed', new Date().toISOString().split('T')[0]);
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       applyLocalLessonCompletion();
@@ -856,6 +888,7 @@ export function App() {
             profile={profile}
             subscription={subscription}
             liveCall={liveCall}
+            lessons={lessons}
             onOpenSubscription={() => setIsSubscriptionOpen(true)}
             onOpenPromptGen={() => setIsPromptGenOpen(true)}
             onOpenAdmin={() => setIsTeacherPortalOpen(true)}
@@ -1214,6 +1247,9 @@ export function App() {
           showToast(`⚡ +${amount} XP`, reason, 'xp');
         }}
       />
+
+      {/* OneSignal Push Subscription Verification Modal */}
+      <OneSignalVerificationModal />
 
       {/* Footer */}
       <footer className="border-t border-neutral-900 bg-neutral-950 py-6 text-center text-xs text-neutral-500">
