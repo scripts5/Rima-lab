@@ -324,6 +324,11 @@ export class BeatEngine {
       this.playMetronomeTick(time, step === 0);
     }
 
+    // If beat is from YouTube or external audio stream, do not synthesize procedural drums!
+    if (this.currentBeat.source === 'youtube' || this.currentBeat.youtubeVideoId) {
+      return;
+    }
+
     // Trigger instruments based on active beat style
     const style = this.currentBeat.style;
 

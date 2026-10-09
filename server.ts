@@ -2306,6 +2306,54 @@ async function startServer() {
     });
   });
 
+  // --- Push Notifications API (Dispatches to Android & Devices outside the app) ---
+  app.post('/api/notifications/schedule-push', (req, res) => {
+    const { delaySeconds = 5, title, body, actionTab = 'lessons', playerId } = req.body || {};
+    const effectiveDelay = Math.max(1, Math.min(Number(delaySeconds) || 5, 86400)); // up to 24h
+
+    // Schedule background dispatch
+    setTimeout(async () => {
+      try {
+        const ONESIGNAL_APP_ID = '25b8716e-b579-4734-944c-b3aab8880227';
+        const payload: any = {
+          app_id: ONESIGNAL_APP_ID,
+          headings: { en: title || '🦉 Academia de Rimas • RimaLab', pt: title || '🦉 Academia de Rimas • RimaLab' },
+          contents: { en: body || 'Sua lição de hoje tá te esperando!', pt: body || 'Sua lição de hoje tá te esperando!' },
+          data: { tab: actionTab, url: `/?tab=${actionTab}` },
+          chrome_web_image: 'https://ais-dev-vrbzkf3oxuguygejgsf7u7-833191056097.us-east1.run.app/notification-icon.png',
+          big_picture: 'https://ais-dev-vrbzkf3oxuguygejgsf7u7-833191056097.us-east1.run.app/notification-icon.png',
+          web_buttons: [
+            { id: 'open_lesson', text: '🦉 Fazer Lição Agora', icon: 'https://ais-dev-vrbzkf3oxuguygejgsf7u7-833191056097.us-east1.run.app/pwa-192x192.png' },
+            { id: 'open_studio', text: '🎤 Treinar Flow' }
+          ]
+        };
+
+        if (playerId) {
+          payload.include_player_ids = [playerId];
+        } else {
+          payload.included_segments = ['Subscribed Users'];
+        }
+
+        await fetch('https://onesignal.com/api/v1/notifications', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(process.env.ONESIGNAL_REST_API_KEY ? { 'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}` } : {})
+          },
+          body: JSON.stringify(payload)
+        }).catch(err => console.debug('OneSignal dispatch fallback:', err.message));
+      } catch (e) {
+        console.debug('Push schedule error:', e);
+      }
+    }, effectiveDelay * 1000);
+
+    res.json({
+      success: true,
+      message: `Notificação do celular agendada com sucesso para daqui a ${effectiveDelay} segundos. Saia do app ou bloqueie a tela do celular para receber!`,
+      scheduledInSeconds: effectiveDelay,
+    });
+  });
+
   // Admin: Get all registered students with full profile & XP details
   app.get('/api/admin/students', (req, res) => {
     const authHeader = req.headers.authorization;
@@ -3182,12 +3230,17 @@ Gere um título marcante, uma proposta de tema profunda, 3 palavras obrigatória
         return res.status(400).json({ error: 'Comando ou link inválido.' });
       }
 
+      // Discord BeatBot: Parse and Analyze Beat Link or Search Query
       const cleanQuery = query.trim();
       const isUrl = /^https?:\/\//i.test(cleanQuery);
 
       // 1. YouTube Link Detection
-      const ytMatch = cleanQuery.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-      
+      let youtubeVideoId: string | null = null;
+      const ytMatch = cleanQuery.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})/i);
+      if (ytMatch) {
+        youtubeVideoId = ytMatch[1];
+      }
+
       // 2. Direct Audio Link (.mp3, .wav, .ogg, .aac, .m4a, stream)
       const isDirectAudio = /\.(mp3|wav|ogg|aac|m4a)(\?.*)?$/i.test(cleanQuery);
 
@@ -3197,26 +3250,55 @@ Gere um título marcante, uma proposta de tema profunda, 3 palavras obrigatória
       // 4. SoundCloud Link
       const isSoundCloud = /soundcloud\.com/i.test(cleanQuery);
 
+      // If user typed a search query (not a URL) and not audio file, search YouTube
+      if (!isUrl && !isDirectAudio && !youtubeVideoId) {
+        try {
+          const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(cleanQuery + ' instrumental beat')}`;
+          const searchRes = await fetch(searchUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+          });
+          if (searchRes.ok) {
+            const html = await searchRes.text();
+            const match = html.match(/\/watch\?v=([\w-]{11})/);
+            if (match) {
+              youtubeVideoId = match[1];
+            }
+          }
+        } catch (searchErr) {
+          console.warn('YouTube search fallback error:', searchErr);
+        }
+      }
+
       let title = cleanQuery;
       let style = 'Boom Bap';
       let bpm = 90;
       let key = 'C Min';
-      let producer = 'Web Audio Stream';
+      let producer = 'YouTube Audio';
       let energy: 'Chill' | 'Médio' | 'Agressivo' | 'Épico' = 'Médio';
       let durationFormatted = '03:15';
       let thumbnailUrl = '';
       let audioUrl = isDirectAudio ? cleanQuery : '';
-      let source: 'synth' | 'custom' | 'youtube' | 'stream' = isDirectAudio ? 'custom' : (ytMatch ? 'youtube' : 'synth');
+      let source: 'synth' | 'custom' | 'youtube' | 'stream' = isDirectAudio ? 'custom' : (youtubeVideoId ? 'youtube' : 'synth');
 
-      if (ytMatch) {
-        const videoId = ytMatch[1];
-        thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-        title = `YouTube Beat #${videoId.slice(0, 6)}`;
-        producer = 'YouTube Audio';
+      // Fetch Real Metadata from YouTube via public oEmbed
+      if (youtubeVideoId) {
+        thumbnailUrl = `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg`;
+        source = 'youtube';
+        try {
+          const oembedRes = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${youtubeVideoId}&format=json`);
+          if (oembedRes.ok) {
+            const oembedData: any = await oembedRes.json();
+            if (oembedData.title) title = oembedData.title;
+            if (oembedData.author_name) producer = oembedData.author_name;
+            if (oembedData.thumbnail_url) thumbnailUrl = oembedData.thumbnail_url;
+          }
+        } catch (oembedErr) {
+          console.warn('YouTube oembed fetch error:', oembedErr);
+        }
       }
 
       // Check keywords for style & BPM inference
-      const lower = cleanQuery.toLowerCase();
+      const lower = (cleanQuery + ' ' + title).toLowerCase();
       if (lower.includes('trap') || lower.includes('808')) {
         style = 'Trap';
         bpm = 140;
@@ -3242,6 +3324,11 @@ Gere um título marcante, uma proposta de tema profunda, 3 palavras obrigatória
         bpm = 140;
         energy = 'Épico';
         key = 'D Min';
+      } else if (lower.includes('detroit')) {
+        style = 'Detroit';
+        bpm = 100;
+        energy = 'Agressivo';
+        key = 'F# Min';
       } else if (lower.includes('boombap') || lower.includes('boom bap') || lower.includes('90s') || lower.includes('old school')) {
         style = 'Boom Bap';
         bpm = 92;
@@ -3258,12 +3345,12 @@ Gere um título marcante, uma proposta de tema profunda, 3 palavras obrigatória
         }
       }
 
-      // Clean title from URL params or prefix
-      if (isUrl) {
+      // Clean title from URL params if direct audio file
+      if (isUrl && !youtubeVideoId) {
         try {
           const urlObj = new URL(cleanQuery);
           const pathname = urlObj.pathname.split('/').filter(Boolean).pop() || '';
-          if (pathname && !ytMatch) {
+          if (pathname) {
             title = decodeURIComponent(pathname).replace(/[-_]/g, ' ').replace(/\.(mp3|wav|ogg)$/i, '');
             title = title.charAt(0).toUpperCase() + title.slice(1);
           }
@@ -3272,21 +3359,19 @@ Gere um título marcante, uma proposta de tema profunda, 3 palavras obrigatória
         }
       }
 
-      // Try Gemini AI to enhance beat description and provide freestyle flow tips
+      // Try Gemini AI to enhance beat description, BPM analysis and freestyle flow tips
       const ai = getGeminiClient();
       let aiFlowTip = 'Mantenha a respiração sincronizada a cada 4 compassos para encaixar a rima.';
       if (ai) {
         try {
-          const prompt = `O usuário no app de freestyle RimaLab digitou o comando de música /play: "${cleanQuery}".
-Analise este título/link e retorne um JSON com:
-1. title: título formatado e profissional do beat de rap/trap/freestyle
-2. style: um de ["Boom Bap", "Trap", "Drill", "Lo-Fi", "Grime", "Speed Flow"]
-3. bpm: número inteiro sugerido entre 70 e 160
-4. key: tom musical (ex: "C Min", "F# Min")
-5. producer: produtor sugerido ou artista
-6. energy: um de ["Chill", "Médio", "Agressivo", "Épico"]
-7. flowTip: dica tática de como rimar e encaixar o flow nesse tipo de beat
-8. durationFormatted: ex "03:20"`;
+          const prompt = `Analise a faixa de música/beat de freestyle com o título: "${title}" (busca original: "${cleanQuery}", produtor: "${producer}").
+Retorne um JSON com:
+1. style: um de ["Boom Bap", "Trap", "Detroit", "Drill", "Lo-Fi", "Grime", "Speed Flow"]
+2. bpm: número inteiro sugerido entre 70 e 160
+3. key: tom musical (ex: "C Min", "F# Min", "A Min")
+4. energy: um de ["Chill", "Médio", "Agressivo", "Épico"]
+5. flowTip: dica tática em português de como rimar e encaixar o flow nessa música
+6. durationFormatted: ex "03:20"`;
 
           const aiResp = await ai.models.generateContent({
             model: 'gemini-3.7-flash',
@@ -3296,27 +3381,23 @@ Analise este título/link e retorne um JSON com:
               responseSchema: {
                 type: Type.OBJECT,
                 properties: {
-                  title: { type: Type.STRING },
                   style: { type: Type.STRING },
                   bpm: { type: Type.INTEGER },
                   key: { type: Type.STRING },
-                  producer: { type: Type.STRING },
                   energy: { type: Type.STRING },
                   flowTip: { type: Type.STRING },
                   durationFormatted: { type: Type.STRING },
                 },
-                required: ['title', 'style', 'bpm', 'key', 'flowTip'],
+                required: ['style', 'bpm', 'key', 'flowTip'],
               },
             },
           });
 
           if (aiResp.text) {
             const parsedAi = JSON.parse(aiResp.text);
-            if (parsedAi.title) title = parsedAi.title;
             if (parsedAi.style) style = parsedAi.style;
             if (parsedAi.bpm) bpm = parsedAi.bpm;
             if (parsedAi.key) key = parsedAi.key;
-            if (parsedAi.producer) producer = parsedAi.producer;
             if (parsedAi.energy) energy = parsedAi.energy;
             if (parsedAi.flowTip) aiFlowTip = parsedAi.flowTip;
             if (parsedAi.durationFormatted) durationFormatted = parsedAi.durationFormatted;
@@ -3327,17 +3408,21 @@ Analise este título/link e retorne um JSON com:
       }
 
       const beatObj = {
-        id: `custom_${Date.now()}`,
-        title,
+        id: youtubeVideoId ? `yt_${youtubeVideoId}` : `custom_${Date.now()}`,
+        title, // EXACT real title from YouTube
         style,
         bpm,
         key,
-        producer,
+        producer, // EXACT author from YouTube
         energy,
-        description: `Beat selecionado via Discord Bot. Dica de Flow: ${aiFlowTip}`,
+        description: youtubeVideoId 
+          ? `Música reproduzida diretamente do YouTube: "${title}".` 
+          : `Beat selecionado via Discord Bot. Dica de Flow: ${aiFlowTip}`,
         audioUrl,
         source,
-        thumbnailUrl: thumbnailUrl || (ytMatch ? `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg` : undefined),
+        youtubeVideoId: youtubeVideoId || undefined,
+        youtubeUrl: youtubeVideoId ? `https://www.youtube.com/watch?v=${youtubeVideoId}` : undefined,
+        thumbnailUrl: thumbnailUrl || (youtubeVideoId ? `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg` : undefined),
         durationFormatted,
         flowTip: aiFlowTip,
         originalQuery: cleanQuery,
@@ -3346,8 +3431,9 @@ Analise este título/link e retorne um JSON com:
       res.json({
         success: true,
         beat: beatObj,
-        isYouTube: !!ytMatch,
-        youtubeVideoId: ytMatch ? ytMatch[1] : null,
+        isYouTube: !!youtubeVideoId,
+        youtubeVideoId: youtubeVideoId,
+        youtubeUrl: youtubeVideoId ? `https://www.youtube.com/watch?v=${youtubeVideoId}` : null,
         isDirectAudio,
         isSpotify,
         isSoundCloud,

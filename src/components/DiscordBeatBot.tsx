@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { Beat, UserProfile } from '../types';
 import { PRESET_BEATS, globalBeatEngine } from '../lib/audio/beatEngine';
+import { YouTubeMusicPlayer } from './YouTubeMusicPlayer';
 
 interface DiscordBeatBotProps {
   profile: UserProfile | null;
@@ -67,8 +68,11 @@ const SLASH_COMMANDS = [
   { cmd: '/avaliar', desc: 'Avalia seus versos com a IA Jurado Técnico Profissional', example: '/avaliar Minha mente é uma máquina criando poesia...' },
   { cmd: '/pause', desc: 'Pausa a reprodução do beat atual', example: '/pause' },
   { cmd: '/resume', desc: 'Retoma o beat que estava pausado', example: '/resume' },
+  { cmd: '/stop', desc: 'Para a reprodução de música e fecha o reprodutor', example: '/stop' },
   { cmd: '/skip', desc: 'Pula para o próximo beat da fila', example: '/skip' },
   { cmd: '/queue', desc: 'Exibe os beats na lista de espera', example: '/queue' },
+  { cmd: '/clear', desc: 'Limpa a fila de músicas pendentes', example: '/clear' },
+  { cmd: '/np', desc: 'Mostra a música que está tocando agora', example: '/np' },
   { cmd: '/bpm', desc: 'Altera a velocidade do beat (BPM)', example: '/bpm 140' },
   { cmd: '/volume', desc: 'Ajusta o volume do bot (0 a 100)', example: '/volume 80' },
   { cmd: '/loop', desc: 'Ativa ou desativa a repetição contínua', example: '/loop' },
@@ -280,6 +284,72 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
     }
   };
 
+  const playSpecificBeat = (beat: Beat) => {
+    setCurrentBeat(beat);
+    if (beat.source === 'youtube' || beat.youtubeVideoId) {
+      globalBeatEngine.stop();
+    } else {
+      globalBeatEngine.setBeat(beat);
+      globalBeatEngine.start();
+    }
+    setIsPlayingBeat(true);
+  };
+
+  const handleNextTrack = () => {
+    if (isLooping) {
+      setIsPlayingBeat(false);
+      setTimeout(() => setIsPlayingBeat(true), 150);
+      return;
+    }
+    if (queue.length > 0) {
+      const nextBeat = queue[0];
+      setQueue(prev => prev.slice(1));
+      playSpecificBeat(nextBeat);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `bot_${Date.now()}`,
+          sender: 'bot',
+          authorName: 'RimaBot Music',
+          isBot: true,
+          timestamp: `Hoje às ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+          embed: {
+            title: `⏭️ Tocando da Fila: ${nextBeat.title}`,
+            description: nextBeat.source === 'youtube'
+              ? 'Áudio oficial do YouTube carregado no reprodutor.'
+              : (nextBeat.description || 'Beat carregado e sincronizado.'),
+            color: '#23a55a',
+            thumbnail: nextBeat.thumbnailUrl,
+            fields: [
+              { name: 'Produtor / Canal', value: `🎧 ${nextBeat.producer}`, inline: true },
+              { name: 'Velocidade', value: `⚡ ${nextBeat.bpm} BPM`, inline: true },
+              { name: 'Restantes na Fila', value: `${queue.length - 1} músicas`, inline: true },
+            ],
+            beatData: nextBeat,
+          },
+        },
+      ]);
+    } else {
+      setIsPlayingBeat(false);
+      globalBeatEngine.stop();
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `bot_${Date.now()}`,
+          sender: 'bot',
+          authorName: 'RimaBot Music',
+          isBot: true,
+          timestamp: `Hoje às ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+          embed: {
+            title: '🏁 Fim da Fila',
+            description: 'Todas as faixas da fila foram tocadas. Digite `/play [link ou nome]` para continuar ouvindo.',
+            color: '#5865F2',
+          },
+        },
+      ]);
+    }
+  };
+
   const executePlayQuery = async (query: string) => {
     if (!query.trim()) return;
 
@@ -327,7 +397,11 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
     }
 
     if (cleanInput === '/resume') {
-      globalBeatEngine.start();
+      if (currentBeat.source === 'youtube' || currentBeat.youtubeVideoId) {
+        globalBeatEngine.stop();
+      } else {
+        globalBeatEngine.start();
+      }
       setIsPlayingBeat(true);
       setIsProcessing(false);
       setMessages(prev => [
@@ -343,6 +417,28 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
             description: `Tocando agora: **${currentBeat.title}** (${currentBeat.bpm} BPM).`,
             color: '#23a55a',
             beatData: currentBeat,
+          },
+        },
+      ]);
+      return;
+    }
+
+    if (cleanInput === '/stop') {
+      globalBeatEngine.stop();
+      setIsPlayingBeat(false);
+      setIsProcessing(false);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `bot_${Date.now()}`,
+          sender: 'bot',
+          authorName: 'RimaBot Music',
+          isBot: true,
+          timestamp: `Hoje às ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+          embed: {
+            title: '⏹️ Reprodução Encerrada',
+            description: 'O reprodutor de música foi parado. Use `/play [link ou nome]` para iniciar uma nova faixa.',
+            color: '#f23f43',
           },
         },
       ]);
@@ -373,51 +469,58 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
 
     if (cleanInput === '/skip') {
       setIsProcessing(false);
-      if (queue.length > 0) {
-        const nextBeat = queue[0];
-        setQueue(prev => prev.slice(1));
-        setCurrentBeat(nextBeat);
-        globalBeatEngine.setBeat(nextBeat);
-        globalBeatEngine.start();
-        setIsPlayingBeat(true);
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `bot_${Date.now()}`,
-            sender: 'bot',
-            authorName: 'RimaBot Music',
-            isBot: true,
-            timestamp: `Hoje às ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-            embed: {
-              title: `⏭️ Pulado! Tocando: ${nextBeat.title}`,
-              description: nextBeat.description,
-              color: '#23a55a',
-              fields: [
-                { name: 'Estilo', value: nextBeat.style, inline: true },
-                { name: 'BPM', value: `${nextBeat.bpm} BPM`, inline: true },
-                { name: 'Restantes na Fila', value: `${queue.length - 1} beats`, inline: true },
-              ],
-              beatData: nextBeat,
-            },
+      handleNextTrack();
+      return;
+    }
+
+    if (cleanInput === '/clear') {
+      setQueue([]);
+      setIsProcessing(false);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `bot_${Date.now()}`,
+          sender: 'bot',
+          authorName: 'RimaBot Music',
+          isBot: true,
+          timestamp: `Hoje às ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+          embed: {
+            title: '🧹 Fila Limpa',
+            description: 'Todas as músicas pendentes foram removidas da fila com sucesso.',
+            color: '#5865F2',
           },
-        ]);
-      } else {
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `bot_${Date.now()}`,
-            sender: 'bot',
-            authorName: 'RimaBot Music',
-            isBot: true,
-            timestamp: `Hoje às ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-            embed: {
-              title: '⚠️ Fila Vazia',
-              description: 'Não há mais músicas na fila. Adicione novas músicas com `/play [link ou nome]`.',
-              color: '#f23f43',
-            },
+        },
+      ]);
+      return;
+    }
+
+    if (cleanInput === '/np' || cleanInput === '/nowplaying') {
+      setIsProcessing(false);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: `bot_${Date.now()}`,
+          sender: 'bot',
+          authorName: 'RimaBot Music',
+          isBot: true,
+          timestamp: `Hoje às ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+          embed: {
+            title: `🎶 Tocando Agora: ${currentBeat.title}`,
+            description: (currentBeat.source === 'youtube' || currentBeat.youtubeVideoId)
+              ? `Reproduzindo áudio oficial do YouTube no canal de voz.`
+              : (currentBeat.description || 'Beat em reprodução no momento.'),
+            color: '#23a55a',
+            thumbnail: currentBeat.thumbnailUrl,
+            fields: [
+              { name: 'Produtor / Canal', value: `🎧 ${currentBeat.producer}`, inline: true },
+              { name: 'Velocidade', value: `⚡ ${currentBeat.bpm} BPM`, inline: true },
+              { name: 'Estado', value: isPlayingBeat ? '▶️ Tocando' : '⏸️ Pausado', inline: true },
+              { name: 'Tipo', value: currentBeat.source === 'youtube' ? '🔴 YouTube' : '🎹 Sintetizador', inline: true },
+            ],
+            beatData: currentBeat,
           },
-        ]);
-      }
+        },
+      ]);
       return;
     }
 
@@ -692,8 +795,12 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
 
         // Set Beat and Play!
         setCurrentBeat(parsedBeat);
-        globalBeatEngine.setBeat(parsedBeat);
-        globalBeatEngine.start();
+        if (parsedBeat.source === 'youtube' || parsedBeat.youtubeVideoId) {
+          globalBeatEngine.stop();
+        } else {
+          globalBeatEngine.setBeat(parsedBeat);
+          globalBeatEngine.start();
+        }
         setIsPlayingBeat(true);
 
         setMessages(prev => [
@@ -706,18 +813,18 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
             timestamp: `Hoje às ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
             embed: {
               title: `🎶 Tocando Agora: ${parsedBeat.title}`,
-              description: data.isYouTube 
-                ? `Link do YouTube detectado e carregado com sucesso! Álbum e áudio prontos para treino.` 
+              description: (data.isYouTube || parsedBeat.source === 'youtube')
+                ? `Música oficial do YouTube carregada no Reprodutor! Tocando diretamente no canal de voz.` 
                 : (parsedBeat.description || 'Beat carregado e sincronizado com o metrônomo do estúdio.'),
               color: '#23a55a',
               thumbnail: parsedBeat.thumbnailUrl || (data.youtubeVideoId ? `https://img.youtube.com/vi/${data.youtubeVideoId}/hqdefault.jpg` : undefined),
               fields: [
+                { name: 'Produtor / Canal', value: `🎧 ${parsedBeat.producer || 'Canal YouTube'}`, inline: true },
                 { name: 'Estilo / Gênero', value: `🏷️ ${parsedBeat.style}`, inline: true },
                 { name: 'Velocidade', value: `⚡ ${parsedBeat.bpm} BPM`, inline: true },
+                { name: 'Origem', value: (data.isYouTube || parsedBeat.source === 'youtube') ? '🔴 YouTube Oficial' : '🎹 Sintetizador Web Audio', inline: true },
                 { name: 'Tom Musical', value: `🎹 ${parsedBeat.key || 'C Min'}`, inline: true },
-                { name: 'Produtor', value: `🎧 ${parsedBeat.producer || 'Cypher Producer'}`, inline: true },
                 { name: 'Energia', value: `🔥 ${parsedBeat.energy || 'Médio'}`, inline: true },
-                { name: 'Duração', value: `⏱️ ${parsedBeat.durationFormatted || '03:15'}`, inline: true },
               ],
               flowTip: data.beat?.flowTip || 'Dica de Rima: Tente dobrar o tempo no 3º verso para acelerar a dicção.',
               beatData: parsedBeat,
@@ -797,8 +904,13 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
   };
 
   const handleTogglePlay = () => {
-    const isPlaying = globalBeatEngine.togglePlay();
-    setIsPlayingBeat(isPlaying);
+    if (currentBeat.source === 'youtube' || currentBeat.youtubeVideoId) {
+      globalBeatEngine.stop();
+      setIsPlayingBeat(!isPlayingBeat);
+    } else {
+      const isPlaying = globalBeatEngine.togglePlay();
+      setIsPlayingBeat(isPlaying);
+    }
   };
 
   const handleBpmChange = (newBpm: number) => {
@@ -1082,6 +1194,22 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
             </div>
           </div>
 
+          {/* Dedicated YouTube Reprodutor de Música when YouTube track is loaded */}
+          {(currentBeat.source === 'youtube' || Boolean(currentBeat.youtubeVideoId)) && (
+            <div className="px-4 pt-3 pb-2 border-b border-neutral-800 bg-[#2b2d31]/80">
+              <YouTubeMusicPlayer
+                currentBeat={currentBeat}
+                isPlaying={isPlayingBeat}
+                onTogglePlay={handleTogglePlay}
+                onNext={queue.length > 0 ? handleNextTrack : undefined}
+                volume={volume}
+                onVolumeChange={handleVolumeChange}
+                onEnded={handleNextTrack}
+                onSendToStudio={onSendToStudio}
+              />
+            </div>
+          )}
+
           {/* Messages Feed */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 max-h-[440px]">
             {messages.map((msg) => (
@@ -1185,9 +1313,14 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
                             id={`embed-toggle-${msg.id}`}
                             onClick={() => {
                               if (currentBeat.id !== msg.embed?.beatData?.id) {
-                                setCurrentBeat(msg.embed!.beatData!);
-                                globalBeatEngine.setBeat(msg.embed!.beatData!);
-                                globalBeatEngine.start();
+                                const beatToPlay = msg.embed!.beatData!;
+                                setCurrentBeat(beatToPlay);
+                                if (beatToPlay.source === 'youtube' || beatToPlay.youtubeVideoId) {
+                                  globalBeatEngine.stop();
+                                } else {
+                                  globalBeatEngine.setBeat(beatToPlay);
+                                  globalBeatEngine.start();
+                                }
                                 setIsPlayingBeat(true);
                               } else {
                                 handleTogglePlay();
@@ -1220,6 +1353,19 @@ export const DiscordBeatBot: React.FC<DiscordBeatBotProps> = ({
                             <Radio className="h-3.5 w-3.5" />
                             <span>🎙️ Usar no Studio</span>
                           </button>
+
+                          {msg.embed.beatData.youtubeUrl && (
+                            <a
+                              href={msg.embed.beatData.youtubeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#35373c] hover:bg-neutral-700 text-neutral-300 text-xs font-medium transition-colors border border-neutral-700/40"
+                              title="Abrir no YouTube oficial"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5 text-neutral-400" />
+                              <span>YouTube</span>
+                            </a>
+                          )}
 
                           <button
                             onClick={() => executePlayQuery('/loop')}

@@ -144,7 +144,9 @@ export const DUOLINGO_NOTIFICATIONS_POOL = {
 };
 
 // Web Audio synthesizer for pristine sound
-export function playNotificationSound(type: 'streak' | 'chime' | 'achievement' | 'alert' | 'lesson' = 'chime') {
+export function playNotificationSound(
+  type: 'streak' | 'chime' | 'achievement' | 'alert' | 'lesson' | 'correct' | 'wrong' | 'click' | 'complete' | 'heart_loss' = 'chime'
+) {
   try {
     const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
@@ -156,7 +158,88 @@ export function playNotificationSound(type: 'streak' | 'chime' | 'achievement' |
 
     const now = ctx.currentTime;
 
-    if (type === 'lesson') {
+    if (type === 'correct') {
+      // Iconic Duolingo rising bell ding (C5 -> E5 -> G5 -> C6) with sparkle
+      const correctNotes = [523.25, 659.25, 783.99, 1046.5];
+      correctNotes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+
+        gain.gain.setValueAtTime(0, now + idx * 0.07);
+        gain.gain.linearRampToValueAtTime(0.25, now + idx * 0.07 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.4);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + idx * 0.07);
+        osc.stop(now + idx * 0.07 + 0.42);
+      });
+    } else if (type === 'wrong' || type === 'heart_loss') {
+      // Duolingo gentle double-buzz for incorrect answer
+      const wrongNotes = [329.63, 246.94]; // E4 -> B3
+      wrongNotes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+
+        gain.gain.setValueAtTime(0, now + idx * 0.12);
+        gain.gain.linearRampToValueAtTime(0.18, now + idx * 0.12 + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.28);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + idx * 0.12);
+        osc.stop(now + idx * 0.12 + 0.3);
+      });
+    } else if (type === 'click') {
+      // Tactile 3D tile pop
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.exponentialRampToValueAtTime(800, now + 0.04);
+
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.06);
+    } else if (type === 'complete') {
+      // Grand Duolingo fanfare
+      const fanfare = [
+        { f: 523.25, d: 0.1 },
+        { f: 659.25, d: 0.1 },
+        { f: 783.99, d: 0.1 },
+        { f: 1046.5, d: 0.3 },
+        { f: 1318.51, d: 0.45 },
+      ];
+      let offset = 0;
+      fanfare.forEach((note) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(note.f, now + offset);
+
+        gain.gain.setValueAtTime(0, now + offset);
+        gain.gain.linearRampToValueAtTime(0.24, now + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + note.d);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + offset);
+        osc.stop(now + offset + note.d + 0.02);
+        offset += note.d * 0.7;
+      });
+    } else if (type === 'lesson') {
       // Signature Duolingo-like 4-note ascending fanfare (C5, E5, G5, C6)
       const lessonNotes = [523.25, 659.25, 783.99, 1046.5];
       lessonNotes.forEach((freq, idx) => {
@@ -319,7 +402,7 @@ export async function sendNativeDeviceNotification(notif: {
     console.debug('Capacitor local notification call fallback:', err);
   }
 
-  // 3. Android APK / PWA Service Worker System Notification (This shows in Android top status bar)
+  // 3. Android APK / PWA Service Worker System Notification (This shows in Android top status bar & lock screen)
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.ready;
@@ -329,22 +412,20 @@ export async function sendNativeDeviceNotification(notif: {
           body: notif.body,
           icon: '/pwa-192x192.png',
           badge: '/badge-icon.png',
+          image: '/notification-icon.png',
           tag: isLesson ? 'rimalab-duolingo-lesson' : `rimalab-${notif.category || 'streak'}`,
           renotify: true,
-          vibrate: isLesson ? [250, 100, 250, 100, 350] : [200, 100, 200],
+          requireInteraction: true,
+          vibrate: isLesson ? [300, 100, 300, 100, 400] : [200, 100, 200],
           data: {
             url: window.location.origin,
             tab: notif.actionTab || (isLesson ? 'lessons' : 'punchlines'),
           },
-          actions: isLesson
-            ? [
-                { action: 'open_lesson', title: '🦉 Fazer Lição Agora' },
-                { action: 'close', title: 'Depois' },
-              ]
-            : [
-                { action: 'open_app', title: '🎤 Treinar Agora' },
-                { action: 'close', title: 'Depois' },
-              ],
+          actions: [
+            { action: 'open_lesson', title: '🦉 Fazer Lição Agora' },
+            { action: 'open_studio', title: '🎤 Treinar Flow' },
+            { action: 'close', title: 'Depois' },
+          ],
         };
         await registration.showNotification(notif.title, swOptions);
         return true;
@@ -362,9 +443,10 @@ export async function sendNativeDeviceNotification(notif: {
         body: notif.body,
         icon: '/pwa-192x192.png',
         badge: '/badge-icon.png',
+        image: '/notification-icon.png',
         tag: isLesson ? 'rimalab-duolingo-lesson' : `rimalab-${notif.category || 'streak'}`,
-        requireInteraction: notif.priority === 'urgent' || isLesson,
-      });
+        requireInteraction: true,
+      } as any);
       n.onclick = () => {
         window.focus();
         n.close();
@@ -376,6 +458,72 @@ export async function sendNativeDeviceNotification(notif: {
   }
 
   return false;
+}
+
+/**
+ * Schedule a delayed background native notification.
+ * Dispatches to the ServiceWorker background thread AND the backend push scheduler,
+ * so the notification arrives in the Android notification shade even when the phone
+ * screen is locked or the app/browser is completely in the background!
+ */
+export async function scheduleDelayedNativeNotification(opts: {
+  delaySeconds: number;
+  title: string;
+  body: string;
+  category?: 'lesson' | 'streak' | 'challenge';
+  actionTab?: string;
+}): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+
+  const { delaySeconds = 5, title, body, category = 'lesson', actionTab = 'lessons' } = opts;
+
+  // 1. Dispatch message to Active Service Worker registration
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg.active) {
+        reg.active.postMessage({
+          type: 'SCHEDULE_NOTIFICATION',
+          delay: delaySeconds * 1000,
+          title,
+          options: {
+            body,
+            icon: '/pwa-192x192.png',
+            badge: '/badge-icon.png',
+            image: '/notification-icon.png',
+            tag: `rimalab-${category}`,
+            vibrate: [300, 100, 300, 100, 400],
+            data: { tab: actionTab },
+            actions: [
+              { action: 'open_lesson', title: '🦉 Fazer Lição Agora' },
+              { action: 'open_studio', title: '🎤 Treinar Flow' },
+              { action: 'close', title: 'Depois' },
+            ],
+          },
+        });
+      }
+    } catch (e) {
+      console.debug('SW postMessage schedule error:', e);
+    }
+  }
+
+  // 2. Also register with backend background push scheduler
+  try {
+    fetch('/api/notifications/schedule-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        delaySeconds,
+        title,
+        body,
+        actionTab,
+      }),
+    }).catch((e) => console.debug('Backend push schedule failed:', e));
+  } catch (e) {
+    // Ignore fetch error
+  }
+
+  return true;
 }
 
 /**

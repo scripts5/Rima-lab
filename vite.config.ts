@@ -55,6 +55,7 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          importScripts: ['/OneSignalSDKWorker.js'],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json,webmanifest}'],
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api/, /^\/live-coach/],

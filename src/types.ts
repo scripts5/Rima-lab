@@ -234,6 +234,8 @@ export interface Beat {
   description: string;
   audioUrl?: string;
   source?: 'synth' | 'custom' | 'youtube' | 'stream';
+  youtubeVideoId?: string;
+  youtubeUrl?: string;
   thumbnailUrl?: string;
   durationFormatted?: string;
   isPro?: boolean;

@@ -45,6 +45,7 @@ import { aiVoiceTutor } from '../lib/speech/aiVoiceTutor';
 import { saveOfflineAudioTake, downloadAudioTakeFile } from '../lib/offline/offlineLessonManager';
 import { ViralCardShareModal } from './ViralCardShareModal';
 import { AsyncDuelModal } from './AsyncDuelModal';
+import { YouTubeMusicPlayer } from './YouTubeMusicPlayer';
 
 interface FreestyleStudioProps {
   profile: UserProfile | null;
@@ -194,7 +195,11 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
 
   // Update Beat Engine when beat or BPM changes
   useEffect(() => {
-    globalBeatEngine.setBeat(currentBeat);
+    if (currentBeat.source === 'youtube' || currentBeat.youtubeVideoId) {
+      globalBeatEngine.stop();
+    } else {
+      globalBeatEngine.setBeat(currentBeat);
+    }
     setBpm(currentBeat.bpm);
   }, [currentBeat]);
 
@@ -413,16 +418,26 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
 
   // Toggle Master Beat
   const handleToggleBeat = () => {
-    const playing = globalBeatEngine.togglePlay();
-    setIsPlayingBeat(playing);
+    if (currentBeat.source === 'youtube' || currentBeat.youtubeVideoId) {
+      globalBeatEngine.stop();
+      setIsPlayingBeat(!isPlayingBeat);
+    } else {
+      const playing = globalBeatEngine.togglePlay();
+      setIsPlayingBeat(playing);
+    }
   };
 
   // Toggle Microphone / Recording
   const handleToggleRecording = async () => {
     if (!isRecording) {
       if (!isPlayingBeat) {
-        globalBeatEngine.start();
-        setIsPlayingBeat(true);
+        if (currentBeat.source === 'youtube' || currentBeat.youtubeVideoId) {
+          globalBeatEngine.stop();
+          setIsPlayingBeat(true);
+        } else {
+          globalBeatEngine.start();
+          setIsPlayingBeat(true);
+        }
       }
       if (!isCameraActive) {
         initCamera(false);
@@ -1373,8 +1388,22 @@ export const FreestyleStudio: React.FC<FreestyleStudioProps> = ({
               </span>
             </div>
 
-            {/* Custom Loaded Beat Banner (if chosen from Discord Bot) */}
-            {!PRESET_BEATS.some(b => b.id === currentBeat.id) && (
+            {/* Custom Loaded Beat Banner / YouTube Player */}
+            {(currentBeat.source === 'youtube' || Boolean(currentBeat.youtubeVideoId)) ? (
+              <div className="mb-4">
+                <YouTubeMusicPlayer
+                  currentBeat={currentBeat}
+                  isPlaying={isPlayingBeat}
+                  onTogglePlay={handleToggleBeat}
+                  volume={Math.round(volume * 100)}
+                  onVolumeChange={(newVol) => {
+                    setVolume(newVol / 100);
+                    globalBeatEngine.setVolume(newVol / 100);
+                  }}
+                  defaultVideoMode={false}
+                />
+              </div>
+            ) : !PRESET_BEATS.some(b => b.id === currentBeat.id) && (
               <div className="mb-3 p-3 rounded-xl border border-[#5865F2]/50 bg-[#5865F2]/10 flex items-center justify-between gap-3 shadow-md">
                 <div className="flex items-center gap-2.5">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#5865F2] text-white font-black text-xs shadow">

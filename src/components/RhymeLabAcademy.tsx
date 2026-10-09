@@ -40,6 +40,7 @@ import {
   removeOfflineLesson, 
   getOfflineLessonsListSync 
 } from '../lib/offline/offlineLessonManager';
+import { DuolingoLessonsView } from './DuolingoLessonsView';
 
 interface RhymeLabAcademyProps {
   lessons: Lesson[];
@@ -56,6 +57,8 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
   onSendToStudio,
   onOpenSkillTracks,
 }) => {
+  // Duolingo View Mode State (Defaults to Duolingo Trilha)
+  const [academyViewMode, setAcademyViewMode] = useState<'duolingo' | 'classic'>('duolingo');
   const [selectedLesson, setSelectedLesson] = useState<Lesson>(lessons[0] || null);
   const [userExerciseText, setUserExerciseText] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -387,10 +390,50 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
   const punchlineCompleted = punchlineLessons.filter(l => l.isCompleted).length;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
-      
-      {/* Academy Header Banner */}
-      <div className="rounded-2xl border border-neutral-800 bg-gradient-to-r from-neutral-900 via-neutral-900 to-amber-950/40 p-6 shadow-2xl">
+    <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 space-y-6">
+      {/* Top View Mode Switcher */}
+      <div className="flex items-center justify-between bg-neutral-900/90 border-2 border-neutral-800 p-2 rounded-2xl max-w-4xl mx-auto shadow-xl">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setAcademyViewMode('duolingo')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 ${
+              academyViewMode === 'duolingo'
+                ? 'bg-[#58cc02] text-white shadow-md border-b-2 border-[#46a302]'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <span>🦉 Trilha Duolingo</span>
+          </button>
+          <button
+            onClick={() => setAcademyViewMode('classic')}
+            className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center gap-2 ${
+              academyViewMode === 'classic'
+                ? 'bg-neutral-800 text-white shadow-md border border-neutral-700'
+                : 'text-neutral-400 hover:text-white'
+            }`}
+          >
+            <span>📋 Modo Detalhado</span>
+          </button>
+        </div>
+        <div className="hidden sm:flex items-center gap-2 text-xs font-bold text-neutral-400 pr-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Formato Oficial Duolingo Ativo</span>
+        </div>
+      </div>
+
+      {academyViewMode === 'duolingo' ? (
+        <DuolingoLessonsView
+          onSelectStudio={() => onSendToStudio('')}
+          userXP={profile?.totalXP || 1250}
+          streakDays={profile?.streakDays || 5}
+          onAddXP={(earned) => {
+            onCompleteLesson('duolingo-path', 'Lição interativa da trilha concluída');
+          }}
+        />
+      ) : (
+        <>
+          {/* Academy Header Banner */}
+          <div className="rounded-2xl border border-neutral-800 bg-gradient-to-r from-neutral-900 via-neutral-900 to-amber-950/40 p-6 shadow-2xl">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -1131,6 +1174,8 @@ export const RhymeLabAcademy: React.FC<RhymeLabAcademyProps> = ({
         )}
 
       </div>
+      </>
+      )}
     </div>
   );
 };
